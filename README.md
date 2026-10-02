@@ -7,6 +7,8 @@
 <p>
   <a href="https://github.com/dortanes/openspatial/releases/latest"><img src="https://img.shields.io/github/v/release/dortanes/openspatial?logo=github&amp;color=blue" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="GPL-3.0 license"></a>
+  <img src="https://img.shields.io/badge/macOS-15%2B-black?logo=apple&amp;logoColor=white" alt="macOS 15 or later">
+  <img src="https://img.shields.io/badge/Swift-native-F05138?logo=swift&amp;logoColor=white" alt="Native Swift">
 </p>
 <p>
   <a href="#features">Features</a> ·
@@ -26,6 +28,7 @@
 ## Features
 
 - **Any headphones, any app.** Wired or wireless, over-ear or in-ear; browsers, players, games and music apps.
+- **Native, top to bottom.** Written in Swift, with its own Core Audio driver and AI that runs on the Neural Engine through Core ML.
 - **Speakers that stay put.** With head tracking on, your Mac's camera follows your head, so the front stays in front.
 - **Surround from stereo.** Stereo spreads to every speaker around you, and 5.1 gets its missing back speakers.
 - **AI surround.** Pulls the voice out of stereo and puts it in front of you, the way a center speaker does in a cinema.
