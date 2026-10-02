@@ -1,0 +1,147 @@
+/* App */
+"app.name" = "OpenSpatial";
+"settings.title" = "OpenSpatial Settings";
+
+/* Menu bar panel */
+"popover.enabled" = "Spatial sound";
+"popover.tracking" = "Head tracking";
+"popover.settings" = "Settings";
+"popover.stage" = "3D view";
+"stage.title" = "OpenSpatial 3D View";
+"popover.quit" = "Quit OpenSpatial";
+"status.headphones %@" = "Playing through %@";
+"status.noHeadphones" = "No headphones found";
+"status.off" = "Spatial sound is off; apps play as plain stereo";
+"status.source.silent" = "Waiting for sound";
+"status.source.stereo" = "Stereo";
+"status.source.stereoSpread" = "Stereo, spread around you";
+"status.source.stereoSeparated" = "Stereo, spread by AI";
+"status.source.fivePointOne" = "5.1";
+"status.source.fivePointOneFilled" = "5.1, back speakers added";
+"status.source.sevenPointOne" = "7.1";
+"status.tracking.off" = "Head tracking is off";
+"status.tracking.following" = "Following your head";
+"status.tracking.searching" = "Looking for your face";
+"status.tracking.noCamera" = "Head tracking needs camera access";
+"notice.noDriver" = "OpenSpatial needs its audio driver to hear your apps.";
+"popover.installDriver" = "Install driver";
+"driver.installing" = "Installing the audio driver…";
+"driver.welcome.title" = "Welcome to OpenSpatial";
+"driver.welcome.detail" = "OpenSpatial hears your apps through its own audio driver. To install it, macOS asks for your password next.";
+"driver.update.title" = "Update the audio driver";
+"driver.update.detail" = "This version of OpenSpatial comes with a new audio driver. To install it, macOS asks for your password next.";
+"driver.later" = "Not now";
+"driver.install.prompt" = "OpenSpatial is installing its audio driver so it can hear your apps.";
+"notice.outputNotSet" = "Apps don't play through OpenSpatial yet. Choose OpenSpatial as the output in Sound settings.";
+
+/* Settings categories */
+"settings.sound" = "Sound";
+"settings.speakers" = "Speakers";
+"settings.tracking" = "Head tracking";
+"settings.about" = "About";
+
+/* Sound */
+"settings.sound.output" = "Output device";
+"settings.sound.fill" = "Fill empty speakers";
+"settings.sound.fill.detail" = "Stereo spreads to every speaker; 5.1 gets back speakers.";
+"settings.sound.separate" = "AI surround";
+"settings.sound.separate.detail" = "Stereo plays about 2 seconds late; best for music.";
+"settings.sound.separate.downloading %lld" = "Downloading the model, %lld%%";
+"settings.sound.separate.starting" = "Starting the model";
+"settings.sound.roomReverb %lld" = "Room reverb %lld%%";
+"settings.effects" = "Effects";
+"settings.effects.gain %+.1f" = "Boost %+.1f dB";
+"settings.effects.gain.detail" = "Makes everything louder when the system volume at its top isn't enough.";
+"settings.effects.stabilizer" = "Stabilizer";
+"settings.effects.stabilizer.detail" = "Keeps loudness even: quiet passages come up, loud ones come down.";
+"settings.effects.limiter" = "Limiter";
+"settings.effects.limiter.detail" = "Holds peaks below distortion, which matters most with a boost.";
+"settings.tone" = "Tone";
+"settings.tone.enabled" = "Tone shaping";
+"settings.tone.upper" = "Upper band";
+"settings.tone.lower" = "Lower band";
+"settings.tone.gain %+.0f" = "Gain %+.0f dB";
+"settings.tone.kilohertz %.1f" = "%.1f kHz";
+"settings.tone.hertz %lld" = "%lld Hz";
+
+/* Speakers */
+"speaker.frontLeft" = "Front left";
+"speaker.frontRight" = "Front right";
+"speaker.center" = "Center";
+"speaker.backLeft" = "Back left";
+"speaker.backRight" = "Back right";
+"speaker.sideLeft" = "Side left";
+"speaker.sideRight" = "Side right";
+"speaker.subwoofer" = "Subwoofer";
+"settings.speakers.level %+.1f" = "%+.1f dB";
+"settings.speakers.solo" = "S";
+"settings.speakers.solo.help" = "Play only this speaker";
+"settings.speakers.mute" = "M";
+"settings.speakers.mute.help" = "Silence this speaker";
+"settings.speakers.reset" = "Reset levels";
+"settings.speakers.deviceChannels" = "Channels from apps";
+"speakers.deviceChannel %lld" = "Channel %lld";
+
+/* Head tracking */
+"settings.tracking.enabled" = "Head tracking";
+"settings.tracking.camera" = "Camera";
+"settings.tracking.camera.appOff" = "Off while spatial sound is off";
+"settings.tracking.camera.face %lld" = "Face found, %lld fps";
+"settings.tracking.camera.noFace" = "No face in view";
+"settings.tracking.turn" = "Head turn";
+"settings.tracking.degrees %lld" = "%lld°";
+"settings.tracking.center" = "Center on current position";
+"settings.tracking.noCamera" = "Head tracking needs camera access. Turn it on in System Settings > Privacy & Security > Camera, then open OpenSpatial again.";
+"settings.tracking.rate" = "Camera frame rate";
+"settings.tracking.rate.detail" = "A higher rate follows quick head turns sooner and uses more energy.";
+"settings.tracking.rate.value %lld" = "%lld fps";
+"settings.tracking.amplification %.1f" = "Turn amplification %.1f×";
+"settings.tracking.amplification.detail" = "Moves the sound further than your head turns, so small movements are easier to hear.";
+
+/* Permissions */
+"settings.permissions" = "Permissions";
+"settings.permissions.detail" = "OpenSpatial doesn't run without the microphone; without the camera, head tracking is unavailable. You manage both in System Settings > Privacy & Security.";
+"permission.microphone" = "Microphone";
+"permission.microphone.reason" = "Apps play into the OpenSpatial audio driver, and macOS treats listening to it as using the microphone. Without it OpenSpatial hears nothing.";
+"permission.camera" = "Camera";
+"permission.camera.reason" = "The camera follows your head turns so the sound stays in place around you. Frames are processed as they arrive and never saved.";
+"permission.alert.title" = "OpenSpatial can't run without microphone access";
+"permission.alert.detail" = "Turn it on in System Settings > Privacy & Security > Microphone, then open OpenSpatial again.";
+"permission.openSettings" = "Open System Settings";
+"permission.alert.quit" = "Quit";
+
+/* About */
+"about.version %@" = "Version %@";
+"about.summary" = "Makes any headphones on your Mac sound like surround speakers placed around you. Head tracking works through the camera.";
+"about.repository" = "Source code";
+"about.support" = "Support me";
+"about.notices" = "Notices";
+"about.notice.driver.title" = "Audio driver";
+"about.notice.driver.body" = "The OpenSpatial audio driver is a modified version of BlackHole by Existential Audio Inc., licensed under the GNU General Public License version 3. Changes: renamed, eight channels and a 7.1 speaker layout.";
+"about.notice.driver.source" = "Driver source";
+"about.notice.driver.license" = "GPL-3.0";
+"about.notice.room.title" = "Room measurements";
+"about.notice.room.body" = "Speaker responses come from the WDR Spatial Audio Impulse Response Compilation by TH Köln (P. Stade, B. Bernschütz, M. Rühl, 2012), licensed under CC BY-SA 3.0. Changes: converted, equalized and re-aimed around the listener.";
+"about.notice.room.source" = "Measurements";
+"about.notice.room.license" = "CC BY-SA 3.0";
+"about.notice.separation.title" = "Separation model";
+"about.notice.separation.body" = "AI surround uses the vocals model of HT-Demucs by Meta Platforms, Inc., licensed under the MIT License. Changes: rewritten to run on the Neural Engine. It is downloaded when you turn AI surround on.";
+"about.notice.separation.source" = "Model source";
+"about.notice.mit" = "MIT";
+"about.copyright" = "© 2026 dortanes";
+
+/* Errors */
+"error.noCamera" = "No camera is available.";
+"error.roomMissing" = "The measured room data is missing from this build.";
+"error.driverMissing" = "The audio driver is missing from this build.";
+"error.driverInstall %@" = "The audio driver didn't install: %@ Click Install driver to try again.";
+"error.outputStart %@" = "Sound output failed to start: %@";
+"error.outputDevice %@" = "Sound can't play on this device: %@";
+"error.separation %@" = "AI surround can't start, so stereo spreads without it. %@";
+"error.separation.damaged" = "The downloaded model doesn't match the published one. Turn AI surround off and on to download it again.";
+"error.sampleRate %@ %lld" = "Set %@ to %lld Hz in Audio MIDI Setup.";
+"error.capture %@ %lld" = "%@ can't be captured (error %lld).";
+"error.captureStart %@ %lld" = "%@ can't be started (error %lld).";
+
+/* Devices */
+"device.unnamed" = "Unnamed device";

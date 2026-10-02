@@ -1,0 +1,2 @@
+"NSCameraUsageDescription" = "The camera follows your head turns so the sound stays in place around you.";
+"NSMicrophoneUsageDescription" = "Sound from apps reaches OpenSpatial through its audio driver, which macOS treats as a microphone.";

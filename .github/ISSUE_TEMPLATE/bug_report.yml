@@ -1,0 +1,44 @@
+name: Bug report
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: OpenSpatial version
+      description: Settings → About.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: macOS version and headphones
+      placeholder: macOS 15.4, wired headphones
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: What was playing
+      description: The app, and stereo, 5.1 or 7.1 as the menu bar panel shows it.
+      placeholder: A browser, stereo
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs

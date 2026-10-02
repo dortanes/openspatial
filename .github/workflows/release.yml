@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release pull request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # A token other than GITHUB_TOKEN lets CI run on the release pull request.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  macos:
+    name: macOS app
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      KEYCHAIN: ${{ github.workspace }}/../signing.keychain-db
+      NOTARY_KEY: ${{ github.workspace }}/../notary.p8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Signing secrets are set
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD != '' }}
+          NOTARY_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 != '' }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID != '' }}
+          NOTARY_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID != '' }}
+        run: |
+          for name in CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY_P8 NOTARY_KEY_ID NOTARY_ISSUER; do
+            if [ "${!name}" != true ]; then echo "::error::Signing secret for $name is not set"; exit 1; fi
+          done
+      - name: Build
+        run: app/build.sh
+      - name: Install signing material
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          umask 077
+          keychain_password="$(openssl rand -hex 24)"
+          security create-keychain -p "$keychain_password" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$keychain_password" "$KEYCHAIN"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          printf '%s' "$NOTARY_KEY_P8" | base64 --decode > "$NOTARY_KEY"
+      - name: Sign and notarize
+        env:
+          NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: NOTARY_ARGS="--key $NOTARY_KEY --key-id $NOTARY_KEY_ID --issuer $NOTARY_ISSUER" app/release.sh
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN" || true
+          rm -f "$NOTARY_KEY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos
+          path: app/build/release/*.dmg
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [release-please, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum -- * > SHA256SUMS
+      # GitHub stores attestations only for public repositories and organization-owned ones.
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: assets/*
+      - name: Attach assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          gh release upload "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
