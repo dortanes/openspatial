@@ -1,6 +1,6 @@
 #!/bin/sh
-# Signs the app build.sh built, with its driver, packs it into a disk image and notarizes it:
-# build/release/OpenSpatial-<version>-macos-arm64.dmg.
+# Signs the app build.sh built, with its driver, notarizes it, packs it into a disk image and notarizes that:
+# build/release/OpenSpatial-<version>-macos-arm64.dmg, both with their tickets stapled.
 # IDENTITY picks the Developer ID Application identity, by name or by hash when the keychain holds it twice.
 # NOTARY_ARGS are notarytool's credentials, by default a profile stored with
 # `xcrun notarytool store-credentials openspatial`.
@@ -20,11 +20,22 @@ ditto build/OpenSpatial.app "$app"
 codesign --force --options runtime --timestamp --sign "$identity" "$app/Contents/Resources/OpenSpatial.driver"
 codesign --force --options runtime --timestamp --entitlements OpenSpatial.entitlements --sign "$identity" "$app"
 codesign --verify --deep --strict "$app"
+
+notarize() {
+	# shellcheck disable=SC2086 # notary_args holds several arguments.
+	xcrun notarytool submit "$1" $notary_args --wait
+}
+
+# The app carries its own ticket, so a copy taken out of the disk image opens offline too.
+zip="$out/OpenSpatial.zip"
+ditto -c -k --keepParent "$app" "$zip"
+notarize "$zip"
+rm "$zip"
+xcrun stapler staple "$app"
 ln -s /Applications "$image/Applications"
 hdiutil create -volname OpenSpatial -srcfolder "$image" -fs HFS+ -format UDZO -ov "$dmg"
 codesign --force --timestamp --sign "$identity" "$dmg"
-# shellcheck disable=SC2086 # notary_args holds several arguments.
-xcrun notarytool submit "$dmg" $notary_args --wait
+notarize "$dmg"
 xcrun stapler staple "$dmg"
 spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
 echo "$dmg"
