@@ -18,22 +18,39 @@ final class SpatialAudio {
     private var started = false
     /// The device the listener chose; hardware changes can stop the engine or move it elsewhere.
     private var outputDevice: AudioObjectID = 0
+    /// Linear gain of each speaker in `SurroundChannel` order: the listener's calibration, and how much nearer
+    /// the listener has moved to it.
+    private var levels = [Float](repeating: 1, count: SurroundChannel.allCases.count)
+    private var nearness = [Float](repeating: 1, count: SurroundChannel.allCases.count)
+    /// Metres from the listener to every speaker, for turning a move of the listener into speaker directions and levels.
+    private static let speakerDistance = 2.0
+
+    /// The rooms handed to the renderer lately, newest last. The render thread lets go of a room when it switches
+    /// to the next one, so they are released here instead, on the main thread, after it has moved on.
+    private var rooms: [RoomFilters] = []
 
     var hasMeasuredRoom: Bool { speakers != nil }
 
-    /// The time-domain room data lives only here; the filter bank keeps its spectra.
+    /// Starts in the standard room, which the app carries.
     init() {
         let capture = self.capture
-        let roomData = Bundle.main.resourceURL.flatMap { try? MeasuredRoomData.load(from: $0) }
-        ringPositions = roomData?.ring.positions
-        speakers = roomData.map { roomData in
-            let ring = FilterBank(table: roomData.ring)
-            return BinauralPlayer(
-                filters: SurroundChannel.allCases.map { _ in ring },
+        let room = try? Room.standard.load()
+        ringPositions = room?.ring.positions
+        speakers = room.map { room in
+            BinauralPlayer(
+                room: room,
+                azimuths: SurroundChannel.allCases.map(\.azimuth),
                 source: capture,
                 downmix: SurroundChannel.allCases.map(\.stereoDownmix)
             )
         }
+        rooms = room.map { [$0] } ?? []
+    }
+
+    /// Moves the speakers into another room, crossfading at the next block.
+    func setRoom(_ room: RoomFilters) {
+        speakers?.setRoom(room)
+        rooms = (rooms + [room]).suffix(3)
     }
 
     func start() throws {
@@ -116,6 +133,14 @@ final class SpatialAudio {
         capture.setSolo(speaker)
     }
 
+    func setCrossover(_ hertz: Int) {
+        capture.setCrossover(hertz)
+    }
+
+    func setSubwooferInverted(_ on: Bool) {
+        capture.setSubwooferInverted(on)
+    }
+
     func setMuted(_ speakers: Set<Int>) {
         capture.setMuted(speakers)
     }
@@ -148,7 +173,10 @@ final class SpatialAudio {
 
     /// Level of each speaker in decibels, in `SurroundChannel` order.
     func setSpeakerLevels(_ decibels: [Double]) {
-        speakers?.setGains(decibels.map { Float(pow(10, $0 / 20)) })
+        for (speaker, level) in decibels.prefix(levels.count).enumerated() {
+            levels[speaker] = Float(pow(10, level / 20))
+        }
+        speakers?.setGains(zip(levels, nearness).map(*))
     }
 
     /// Scales the measured room's late reverberation; 1 keeps the room as measured.
@@ -180,12 +208,23 @@ final class SpatialAudio {
         eq.bands[index].gain = Float(band.gain)
     }
 
-    /// Positive degrees turn the listener to the right; the speakers stay where they are in the room.
-    func turnListener(degrees: Double) {
+    /// The listener turns `turn` degrees to the right and moves `right` metres to the right and `forward` metres
+    /// toward the front speakers; the speakers stay where they are in the room, and the ones the listener moved
+    /// nearer play louder. The subwoofer has no direction and stays as it is.
+    func placeListener(turn: Double, right: Double, forward: Double) {
         guard let size = ringPositions else { return }
         for (source, channel) in SurroundChannel.allCases.enumerated() {
-            let relative = Int((channel.azimuth - degrees).rounded()) % size
+            var azimuth = channel.azimuth
+            if channel != .subwoofer {
+                let radians = azimuth * .pi / 180
+                let x = sin(radians) * Self.speakerDistance - right
+                let z = cos(radians) * Self.speakerDistance - forward
+                azimuth = atan2(x, z) * 180 / .pi
+                nearness[source] = Float(Self.speakerDistance / hypot(x, z))
+            }
+            let relative = Int((azimuth - turn).rounded()) % size
             speakers?.setPosition((relative + size) % size, source: source)
         }
+        speakers?.setGains(zip(levels, nearness).map(*))
     }
 }

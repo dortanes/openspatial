@@ -1,10 +1,20 @@
 import AVFoundation
 import Vision
 
-/// Follows the listener's head turns through the camera.
+/// Where the listener's head is, as the camera sees it.
+struct HeadPose {
+    /// Degrees, positive when the head turns right.
+    let yaw: Double
+    /// Width of the face as a fraction of the frame; it grows as the listener leans toward the camera.
+    let size: Double
+    /// Middle of the face across the frame, from the listener's left (0) to their right (1).
+    let across: Double
+}
+
+/// Follows the listener's head turns and distance through the camera.
 final class HeadTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    /// Head yaw in degrees, positive when the head turns right, or nil when no face is in view.
-    var onYaw: ((Double?) -> Void)?
+    /// The head's pose, or nil when no face is in view.
+    var onPose: ((HeadPose?) -> Void)?
     var onError: ((String) -> Void)?
 
     /// Camera frame rates the listener can choose; face detection costs CPU on every frame.
@@ -82,7 +92,17 @@ final class HeadTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
         guard let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         try? VNImageRequestHandler(cvPixelBuffer: pixels, orientation: .up).perform([request])
         let face = request.results?.max { $0.boundingBox.width < $1.boundingBox.width }
-        // Vision reports yaw with the opposite sign to a right turn of the head.
-        onYaw?(face?.yaw.map { -$0.doubleValue * 180 / .pi })
+        guard let face, let yaw = face.yaw else {
+            onPose?(nil)
+            return
+        }
+        // Vision reports yaw with the opposite sign to a right turn of the head. A camera facing the listener
+        // shows their right on the left of an unmirrored image.
+        let middle = Double(face.boundingBox.midX)
+        onPose?(HeadPose(
+            yaw: -yaw.doubleValue * 180 / .pi,
+            size: Double(face.boundingBox.width),
+            across: connection.isVideoMirrored ? middle : 1 - middle
+        ))
     }
 }

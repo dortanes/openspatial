@@ -302,6 +302,15 @@ final class SystemCapture: BlockSource {
     private let muted = Atomic<Int>(0)
 
     /// Plays one speaker alone, or all of them when `speaker` is nil.
+    /// Hertz below which every speaker's bass moves to the subwoofer.
+    func setCrossover(_ hertz: Int) {
+        crossover.setFrequency(hertz)
+    }
+
+    func setSubwooferInverted(_ on: Bool) {
+        crossover.setInverted(on)
+    }
+
     func setSolo(_ speaker: Int?) {
         solo.store(speaker ?? -1, ordering: .relaxed)
     }
@@ -356,8 +365,8 @@ final class SystemCapture: BlockSource {
         let labels = device.outputChannelLabels()
         var labeled: [Route?] = labels.map { label in
             if label == kAudioChannelLabel_LFEScreen || label == kAudioChannelLabel_LFE2 {
-                // LFE plays at -3 dB.
-                return (subwoofer, 0.707)
+                // LFE is recorded 10 dB down and plays 10 dB up, as cinemas and home theater receivers play it.
+                return (subwoofer, 3.162)
             }
             return SurroundChannel(label: label, in: labels).map { (SurroundChannel.allCases.firstIndex(of: $0)!, 1) }
         }

@@ -65,6 +65,8 @@ enum AppLinks {
     /// The Neural Engine version of the separation model, built by separation/export.py.
     static let separationModel = URL(string: "https://github.com/dortanes/openspatial/releases/download/htdemucs-vocals-1/HTDemucsVocals.mlpackage.zip")!
     static let separationSource = URL(string: "https://github.com/facebookresearch/demucs")!
+    /// The release holding one archive per downloadable room, built by room/export.py.
+    static let rooms = URL(string: "https://github.com/dortanes/openspatial/releases/download/rooms-1")!
     static let mitLicense = URL(string: "https://opensource.org/license/mit")!
     static let microphoneSettings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
     static let cameraSettings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!

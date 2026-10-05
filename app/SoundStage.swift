@@ -19,8 +19,8 @@ struct SoundStage: View {
                 content.add(scene.root)
             } update: { _ in
                 scene.update(
-                    levels: live.speakerLevels, sources: live.soundSources, solo: model.soloSpeaker, muted: model.mutedSpeakers,
-                    yaw: live.yaw, time: timeline.date.timeIntervalSinceReferenceDate
+                    room: model.room, levels: live.speakerLevels, sources: live.soundSources, solo: model.soloSpeaker, muted: model.mutedSpeakers,
+                    yaw: live.yaw, shift: live.shift, lean: live.lean, time: timeline.date.timeIntervalSinceReferenceDate
                 )
             }
             .gesture(SpatialTapGesture().targetedToAnyEntity().onEnded { value in
@@ -78,8 +78,11 @@ final class StageScene: ObservableObject {
     /// Balls circle inside the speakers so a cabinet never hides one.
     private static let ballRadius: Float = 1.6
     private static let earHeight: Float = 1.2
-    private static let roomSize: Float = 7
-    private static let roomHeight: Float = 3
+    /// The floor shown without a room: width, length, unused height.
+    private static let openFloor: SIMD3<Float> = [7, 7, 0]
+    private let roomEntity = Entity()
+    private var shownRoom: Room?
+    private var maxCameraDistance: Float = 12
     /// Seconds for a ball to cover about two thirds of the way to a new position and size, to grow in, and to shrink away.
     private static let glide: Float = 0.15
     private static let appear: Float = 0.1
@@ -102,6 +105,8 @@ final class StageScene: ObservableObject {
     private static let waveLife: TimeInterval = 1.2
     private static let subwoofer = SurroundChannel.allCases.firstIndex(of: .subwoofer)!
 
+    /// The listener's body and head, which move together as the listener leans in; the head also turns.
+    private let listener = Entity()
     private let head = Entity()
     private var balls: [SoundBall] = []
     /// A unit ring on the floor, copied for each wave, and the waves under way with when they started and how strong.
@@ -140,16 +145,31 @@ final class StageScene: ObservableObject {
         light.look(at: .zero, from: [-2, 4, 3], relativeTo: nil)
         root.addChild(light)
         placeCamera()
-        buildRoom()
+        root.addChild(roomEntity)
+        show(Room.standard)
         buildListener()
         for channel in SurroundChannel.allCases {
             buildSpeaker(channel)
         }
     }
 
-    /// `solo` and `muted` are speakers by `SurroundChannel` index, as in the speaker settings.
-    func update(levels: [ChannelLevel], sources: [SoundSource], solo: Int?, muted: Set<Int>, yaw: Double, time: TimeInterval) {
+    /// `solo` and `muted` are speakers by `SurroundChannel` index, as in the speaker settings; `shift` and `lean`
+    /// are metres to the right and toward the front speakers.
+    func update(
+        room: Room,
+        levels: [ChannelLevel],
+        sources: [SoundSource],
+        solo: Int?,
+        muted: Set<Int>,
+        yaw: Double,
+        shift: Double,
+        lean: Double,
+        time: TimeInterval
+    ) {
+        show(room)
         head.orientation = simd_quatf(angle: Float(-yaw * .pi / 180), axis: [0, 1, 0])
+        // RealityKit looks down -z.
+        listener.position = [Float(shift), 0, -Float(lean)]
         let step = Float(time - (lastTime ?? time))
         lastTime = time
         let settle = 1 - exp(-step / Self.coneReturn)
@@ -298,7 +318,7 @@ final class StageScene: ObservableObject {
     }
 
     private func setDistance(_ distance: Float) {
-        cameraDistance = min(12, max(2.5, distance))
+        cameraDistance = min(maxCameraDistance, max(2.5, distance))
         placeCamera()
     }
 
@@ -321,42 +341,54 @@ final class StageScene: ObservableObject {
         return [sin(radians), 0, -cos(radians)]
     }
 
-    private func buildRoom() {
+    /// Draws the room's floor, grid and edges around the listener, who stands in its middle. Without a room
+    /// only a floor shows, so the speakers stand in open space.
+    private func show(_ room: Room) {
+        guard room != shownRoom else { return }
+        shownRoom = room
+        roomEntity.children.removeAll()
+        let size = room.size ?? Self.openFloor
         let floor = ModelEntity(
-            mesh: .generatePlane(width: Self.roomSize, depth: Self.roomSize),
+            mesh: .generatePlane(width: size.x, depth: size.y),
             materials: [SimpleMaterial(color: .init(white: 0.08, alpha: 1), isMetallic: false)]
         )
-        root.addChild(floor)
+        roomEntity.addChild(floor)
         let line = UnlitMaterial(color: .init(white: 0.3, alpha: 1))
-        let half = Self.roomSize / 2
-        for step in stride(from: -half, through: half, by: 0.5) {
-            for (width, depth, position) in [
-                (Self.roomSize, Float(0.005), SIMD3<Float>(0, 0.001, step)),
-                (Float(0.005), Self.roomSize, SIMD3<Float>(step, 0.001, 0)),
-            ] {
-                let gridLine = ModelEntity(mesh: .generatePlane(width: width, depth: depth), materials: [line])
-                gridLine.position = position
-                root.addChild(gridLine)
-            }
+        let halfWidth = size.x / 2, halfLength = size.y / 2
+        // Lines every half metre in a small room, every metre in a hall.
+        let spacing: Float = max(size.x, size.y) > 12 ? 1 : 0.5
+        for z in stride(from: -halfLength, through: halfLength, by: spacing) {
+            let gridLine = ModelEntity(mesh: .generatePlane(width: size.x, depth: 0.005), materials: [line])
+            gridLine.position = [0, 0.001, z]
+            roomEntity.addChild(gridLine)
         }
+        for x in stride(from: -halfWidth, through: halfWidth, by: spacing) {
+            let gridLine = ModelEntity(mesh: .generatePlane(width: 0.005, depth: size.y), materials: [line])
+            gridLine.position = [x, 0.001, 0]
+            roomEntity.addChild(gridLine)
+        }
+        // Rooms can be far larger than the speaker circle; the camera may back out to see a hall whole.
+        maxCameraDistance = max(12, max(size.x, size.y) * 0.9)
+        setDistance(cameraDistance)
+        guard room.size != nil else { return }
         let edge = UnlitMaterial(color: .init(white: 0.45, alpha: 1))
-        for x in [-half, half] {
-            for z in [-half, half] {
-                let post = ModelEntity(mesh: .generateBox(size: [0.02, Self.roomHeight, 0.02]), materials: [edge])
-                post.position = [x, Self.roomHeight / 2, z]
-                root.addChild(post)
+        for x in [-halfWidth, halfWidth] {
+            for z in [-halfLength, halfLength] {
+                let post = ModelEntity(mesh: .generateBox(size: [0.02, size.z, 0.02]), materials: [edge])
+                post.position = [x, size.z / 2, z]
+                roomEntity.addChild(post)
             }
         }
-        for y in [Float(0), Self.roomHeight] {
-            for (size, position) in [
-                (SIMD3<Float>(Self.roomSize, 0.02, 0.02), SIMD3<Float>(0, y, -half)),
-                (SIMD3<Float>(Self.roomSize, 0.02, 0.02), SIMD3<Float>(0, y, half)),
-                (SIMD3<Float>(0.02, 0.02, Self.roomSize), SIMD3<Float>(-half, y, 0)),
-                (SIMD3<Float>(0.02, 0.02, Self.roomSize), SIMD3<Float>(half, y, 0)),
+        for y in [Float(0), size.z] {
+            for (beamSize, position) in [
+                (SIMD3<Float>(size.x, 0.02, 0.02), SIMD3<Float>(0, y, -halfLength)),
+                (SIMD3<Float>(size.x, 0.02, 0.02), SIMD3<Float>(0, y, halfLength)),
+                (SIMD3<Float>(0.02, 0.02, size.y), SIMD3<Float>(-halfWidth, y, 0)),
+                (SIMD3<Float>(0.02, 0.02, size.y), SIMD3<Float>(halfWidth, y, 0)),
             ] {
-                let beam = ModelEntity(mesh: .generateBox(size: size), materials: [edge])
+                let beam = ModelEntity(mesh: .generateBox(size: beamSize), materials: [edge])
                 beam.position = position
-                root.addChild(beam)
+                roomEntity.addChild(beam)
             }
         }
     }
@@ -387,8 +419,9 @@ final class StageScene: ObservableObject {
             materials: [SimpleMaterial(color: .init(white: 0.35, alpha: 1), isMetallic: false)]
         )
         body.position = [0, Self.earHeight - 0.5, 0]
-        root.addChild(body)
-        root.addChild(head)
+        listener.addChild(body)
+        listener.addChild(head)
+        root.addChild(listener)
     }
 
     private func buildSpeaker(_ channel: SurroundChannel) {

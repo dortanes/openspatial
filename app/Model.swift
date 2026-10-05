@@ -20,7 +20,20 @@ final class LiveState: ObservableObject {
     @Published fileprivate(set) var soundSources: [SoundSource] = []
     /// Smoothed head turn in degrees, positive to the right.
     @Published fileprivate(set) var yaw = 0.0
+    /// Metres the listener has moved toward the front speakers by leaning in; negative when leaning back.
+    @Published fileprivate(set) var lean = 0.0
+    /// Metres the listener has moved to the right; negative to the left.
+    @Published fileprivate(set) var shift = 0.0
     @Published fileprivate(set) var framesPerSecond = 0
+}
+
+/// Where the chosen room is on its way to the speakers.
+enum RoomStatus: Equatable {
+    case ready
+    /// Download progress from 0 to 1.
+    case downloading(Double)
+    case loading
+    case failed(String)
 }
 
 enum SeparationStatus: Equatable {
@@ -63,6 +76,13 @@ final class Model: ObservableObject {
     @Published private(set) var separation = SeparationStatus.off
     /// Level of each speaker in decibels, in `SurroundChannel` order; it calibrates the listener's own headphones.
     @Published var speakerLevels: [Double] { didSet { audio.setSpeakerLevels(speakerLevels); save() } }
+    /// Where the speakers stand; a room not inside the app downloads when chosen.
+    @Published var room: Room { didSet { updateRoom(); save() } }
+    @Published private(set) var roomStatus = RoomStatus.ready
+    /// Hertz below which every speaker's bass plays from the subwoofer.
+    @Published var crossover: Int { didSet { audio.setCrossover(crossover); save() } }
+    /// The subwoofer with its polarity flipped, which cancels bass around the crossover.
+    @Published var subwooferInverted: Bool { didSet { audio.setSubwooferInverted(subwooferInverted); save() } }
     /// Devices the rendered sound can play on; never the driver, which would feed back.
     @Published private(set) var outputDevices: [AudioDevice] = []
     @Published var outputDeviceID: AudioObjectID = 0 {
@@ -108,10 +128,30 @@ final class Model: ObservableObject {
     private var yaw = 0.0
     private var rawYaw = 0.0
     private var centerYaw = 0.0
+    /// Moving in front of the screen moves the listener among the speakers. Against where the face was when
+    /// centered, about `cameraDistance` metres from a camera with a horizontal field of view of about
+    /// `fieldOfView` degrees, its width gives the move toward the screen and its place across the frame the move
+    /// sideways. The listener moves `moveScale` times as far, ignoring the first `moveDeadzone` metres and stopping
+    /// at `maxMove` either way. The face's size and place are noisier than its turn, so they are smoothed more.
+    private static let cameraDistance = 0.6
+    private static let fieldOfView = 70.0
+    private static let moveScale = 2.0
+    private static let moveDeadzone = 0.05
+    private static let maxMove = 0.8
+    private static let moveSmoothing = 0.15
+    /// Metres toward the front speakers and to the right.
+    private var lean = 0.0
+    private var shift = 0.0
+    private var rawSize = 0.0
+    private var rawAcross = 0.5
+    /// Zero until the first face sets it.
+    private var centerSize = 0.0
+    private var centerAcross = 0.5
     private var frameCount = 0
     private var rateWindowStart = Date()
     private var meterTimer: Timer?
     private var separationTask: Task<Void, Never>?
+    private var roomTask: Task<Void, Never>?
     private let audio = SpatialAudio()
     private let tracker = HeadTracker()
     private let volume = VolumeLink()
@@ -132,6 +172,9 @@ final class Model: ObservableObject {
         fillSpeakers = saved.fillSpeakers
         separateStems = saved.separateStems
         speakerLevels = saved.speakerLevels
+        room = saved.room
+        crossover = saved.crossover
+        subwooferInverted = saved.subwooferInverted
         preferredOutputUID = saved.outputDeviceUID
         previousSystemOutputUID = saved.previousSystemOutputUID
 
@@ -157,7 +200,12 @@ final class Model: ObservableObject {
         audio.setLimiter(limiter)
         audio.setFill(fillSpeakers)
         audio.setSpeakerLevels(speakerLevels)
+        audio.setCrossover(crossover)
+        audio.setSubwooferInverted(subwooferInverted)
         updateSeparation()
+        if room != .standard {
+            updateRoom()
+        }
         applyOrientation()
         AudioDevice.observeChanges { [weak self] in
             MainActor.assumeIsolated { self?.refreshDevices() }
@@ -169,8 +217,8 @@ final class Model: ObservableObject {
             MainActor.assumeIsolated { self?.restoreSystemOutput() }
         }
         tracker.setFrameRate(trackingRate)
-        tracker.onYaw = { [weak self] yaw in
-            Task { @MainActor in self?.update(yaw) }
+        tracker.onPose = { [weak self] pose in
+            Task { @MainActor in self?.update(pose) }
         }
         tracker.onError = { [weak self] message in
             Task { @MainActor in self?.trackingError = message }
@@ -196,10 +244,17 @@ final class Model: ObservableObject {
         outputDevices.first { $0.id == outputDeviceID }?.name
     }
 
+    /// Takes where the listener is now as straight ahead, in the middle of the speakers.
     func recenter() {
         centerYaw = rawYaw
+        centerSize = rawSize
+        centerAcross = rawAcross
         yaw = 0
+        lean = 0
+        shift = 0
         live.yaw = 0
+        live.lean = 0
+        live.shift = 0
         applyOrientation()
     }
 
@@ -248,6 +303,9 @@ final class Model: ObservableObject {
         preferences.fillSpeakers = fillSpeakers
         preferences.separateStems = separateStems
         preferences.speakerLevels = speakerLevels
+        preferences.room = room
+        preferences.crossover = crossover
+        preferences.subwooferInverted = subwooferInverted
         preferences.outputDeviceUID = preferredOutputUID
         preferences.previousSystemOutputUID = previousSystemOutputUID
         preferences.save()
@@ -356,6 +414,41 @@ final class Model: ObservableObject {
         }
     }
 
+    /// Downloads the chosen room if it isn't here yet, then hands it to the renderer, which crossfades into it.
+    private func updateRoom() {
+        roomTask?.cancel()
+        let room = self.room
+        roomTask = Task { [weak self] in
+            do {
+                if !room.isAvailable {
+                    self?.roomStatus = .downloading(0)
+                    try await room.download { fraction in
+                        Task { @MainActor in
+                            if case .downloading = self?.roomStatus {
+                                self?.roomStatus = .downloading(fraction)
+                            }
+                        }
+                    }
+                }
+                try Task.checkCancellation()
+                self?.roomStatus = .loading
+                let filters = try await Self.loadRoom(room)
+                try Task.checkCancellation()
+                self?.audio.setRoom(filters)
+                self?.roomStatus = .ready
+            } catch {
+                guard !Task.isCancelled else { return }
+                let reason = (error as? ModelError)?.message ?? error.localizedDescription
+                self?.roomStatus = .failed(String(localized: "error.room \(reason)"))
+            }
+        }
+    }
+
+    /// Transforming a room's responses takes a moment, so it happens off the main thread.
+    private nonisolated static func loadRoom(_ room: Room) async throws -> RoomFilters {
+        try room.load()
+    }
+
     /// Loading the model takes a moment, so it happens off the main thread.
     private nonisolated static func loadSeparator() async throws -> VocalSeparator {
         try VocalSeparator(model: VocalModel.location)
@@ -415,17 +508,30 @@ final class Model: ObservableObject {
         applyOrientation()
     }
 
-    private func update(_ detected: Double?) {
+    private func update(_ pose: HeadPose?) {
         countFrame()
-        guard let detected else {
+        guard let pose else {
             if faceFound { faceFound = false }
             return
         }
         if !faceFound { faceFound = true }
-        rawYaw = detected
+        rawYaw = pose.yaw
         yaw += (rawYaw - centerYaw - yaw) * smoothing
+        rawSize = pose.size
+        rawAcross = pose.across
+        if centerSize == 0 {
+            centerSize = rawSize
+            centerAcross = rawAcross
+        }
+        // Distance scales inversely with the face's width; the frame is wider the farther the face is.
+        let distance = Self.cameraDistance * centerSize / rawSize
+        let frameWidth = 2 * distance * tan(Self.fieldOfView / 2 * .pi / 180)
+        lean += (Self.move(Self.cameraDistance - distance) - lean) * Self.moveSmoothing
+        shift += (Self.move((rawAcross - centerAcross) * frameWidth) - shift) * Self.moveSmoothing
         if showsLiveValues {
             live.yaw = yaw
+            live.lean = lean
+            live.shift = shift
         }
         applyOrientation()
     }
@@ -443,6 +549,13 @@ final class Model: ObservableObject {
     }
 
     private func applyOrientation() {
-        audio.turnListener(degrees: enabled && tracking ? yaw * turnGain : 0)
+        let follows = enabled && tracking
+        audio.placeListener(turn: follows ? yaw * turnGain : 0, right: follows ? shift : 0, forward: follows ? lean : 0)
+    }
+
+    /// The listener's move in metres for the face's move: scaled, without the dead zone, and within the limit.
+    private static func move(_ metres: Double) -> Double {
+        let moved = min(maxMove, max(0, abs(metres * moveScale) - moveDeadzone))
+        return metres < 0 ? -moved : moved
     }
 }

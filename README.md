@@ -32,6 +32,7 @@
 - **Speakers that stay put.** With head tracking on, your Mac's camera follows your head, so the front stays in front.
 - **Surround from stereo.** Stereo spreads to every speaker around you, and 5.1 gets its missing back speakers.
 - **AI surround.** Pulls the voice out of stereo and puts it in front of you, the way a center speaker does in a cinema.
+- **Pick the room.** Two studio control rooms, a small and a large concert hall, or no room at all.
 - **Louder and even.** Boost quiet apps, even out loud and quiet scenes, and shape the tone.
 - **See the sound.** Watch the speakers play and where each sound comes from in a 3D view of the room.
 - **Works with Wine.** Windows games play in full 7.1.
@@ -90,7 +91,7 @@ open app/build/OpenSpatial.app
 ## Credits
 
 - Audio driver: [BlackHole](https://github.com/ExistentialAudio/BlackHole) by Existential Audio, GPL-3.0.
-- Room responses: WDR Spatial Audio Impulse Response Compilation by TH Köln (P. Stade, B. Bernschütz, M. Rühl, 2012), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), from the [SOFA database](https://sofacoustics.org/data/database/thk/); converted, equalized and re-aimed around the listener.
+- Rooms: WDR Spatial Audio Impulse Response Compilation by TH Köln (P. Stade, B. Bernschütz, M. Rühl, 2012), and for No room the Neumann KU 100 far-field HRIRs by B. Bernschütz, TH Köln, both [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), from the [SOFA database](https://sofacoustics.org/data/database/thk/); converted, equalized, re-aimed around the listener and shortened.
 - AI surround model: [HT-Demucs](https://github.com/facebookresearch/demucs) by Meta Platforms, MIT.
 
 ## Community

@@ -1,5 +1,6 @@
 import Accelerate
 import GameplayKit
+import Synchronization
 
 /// Splits a channel pair in the frequency domain, one block at a time: what is common to both channels,
 /// each channel without it, and each channel's diffuse part. When widening, each channel without the common
@@ -326,46 +327,75 @@ final class SpeakerFiller {
     }
 }
 
-/// Bass management: every speaker's content below 80 Hz moves to the subwoofer. Linkwitz-Riley crossovers of
-/// the fourth order sum back to a flat response, so the bass keeps its level until the subwoofer's is changed.
+/// Bass management as a home theater receiver does it: every speaker's content below the crossover frequency
+/// moves to the subwoofer, and the LFE channel, already there, keeps only what is below 120 Hz. Linkwitz-Riley
+/// crossovers of the fourth order sum back to a flat response with the subwoofer in phase, so the bass keeps its
+/// level until the subwoofer's is changed; inverted, it cancels around the crossover as a real one would.
+/// The subwoofer then plays down to about 20 Hz like a real one: the measured loudspeaker it plays through
+/// loses 8 dB at 20 Hz, which a narrow boost restores, and a subsonic filter stops it below 15 Hz.
 final class BassCrossover {
-    private static let frequency = 80.0
+    /// Hertz the listener can choose, and the one receivers default to.
+    static let frequencies = 40...160
+    static let standardFrequency = 80
+    private static let lfeLimit = 120.0
     private static let sampleRate = 48000.0
     private static let subwoofer = SurroundChannel.allCases.firstIndex(of: .subwoofer)!
     private static let mains = SurroundChannel.allCases.indices.filter { $0 != subwoofer }
 
     private let block = BinauralConvolver.blockSize
-    private let lowPass, highPass: vDSP_biquad_Setup
-    /// Filter state per main speaker: two sections need six values each way.
-    private let lowState, highState: UnsafeMutablePointer<Float>
+    private let requested = Atomic<Int>(BassCrossover.standardFrequency)
+    private let inverted = Atomic<Bool>(false)
+    /// Worker only: the crossover frequency the filters were built for.
+    private var built = BassCrossover.standardFrequency
+    private var lowPass, highPass: vDSP_biquad_Setup
+    private let lfePass, lowEnd: vDSP_biquad_Setup
+    /// Filter state: two sections need six values, per main speaker for the crossover.
+    private let lowState, highState, lfeState, lowEndState: UnsafeMutablePointer<Float>
     private let scratch: UnsafeMutablePointer<Float>
 
     init() {
-        // A fourth-order Linkwitz-Riley filter is two identical second-order Butterworth sections (Q = 1/√2).
-        let w = 2 * Double.pi * Self.frequency / Self.sampleRate
-        let alpha = sin(w) / (2 * 0.5.squareRoot())
-        let a0 = 1 + alpha
-        let feedback = [-2 * cos(w) / a0, (1 - alpha) / a0]
-        let low = [(1 - cos(w)) / 2 / a0, (1 - cos(w)) / a0, (1 - cos(w)) / 2 / a0] + feedback
-        let high = [(1 + cos(w)) / 2 / a0, -(1 + cos(w)) / a0, (1 + cos(w)) / 2 / a0] + feedback
-        lowPass = vDSP_biquad_CreateSetup(low + low, 2)!
-        highPass = vDSP_biquad_CreateSetup(high + high, 2)!
+        (lowPass, highPass) = Self.crossover(Double(Self.standardFrequency))
+        let lfe = Self.lowPass(Self.lfeLimit)
+        lfePass = vDSP_biquad_CreateSetup(lfe + lfe, 2)!
+        lowEnd = vDSP_biquad_CreateSetup(Self.peaking(21, q: 2.5, decibels: 8) + Self.highPass(15, q: 0.5.squareRoot()), 2)!
         lowState = PairSplitter.zeroed(Self.mains.count * 6)
         highState = PairSplitter.zeroed(Self.mains.count * 6)
+        lfeState = PairSplitter.zeroed(6)
+        lowEndState = PairSplitter.zeroed(6)
         scratch = PairSplitter.zeroed(block)
     }
 
     deinit {
-        vDSP_biquad_DestroySetup(lowPass)
-        vDSP_biquad_DestroySetup(highPass)
-        for pointer in [lowState, highState, scratch] {
+        for setup in [lowPass, highPass, lfePass, lowEnd] {
+            vDSP_biquad_DestroySetup(setup)
+        }
+        for pointer in [lowState, highState, lfeState, lowEndState, scratch] {
             pointer.deallocate()
         }
     }
 
+    /// Safe from any thread; takes effect at the next block.
+    func setFrequency(_ hertz: Int) {
+        requested.store(min(max(hertz, Self.frequencies.lowerBound), Self.frequencies.upperBound), ordering: .relaxed)
+    }
+
+    /// Flips the subwoofer's polarity. Safe from any thread.
+    func setInverted(_ on: Bool) {
+        inverted.store(on, ordering: .relaxed)
+    }
+
+    /// Takes the subwoofer plane holding only the LFE channel, or silence. Worker thread only.
     func process(_ planes: UnsafeMutablePointer<Float>) {
         let n = vDSP_Length(block)
+        let wanted = requested.load(ordering: .relaxed)
+        if wanted != built {
+            vDSP_biquad_DestroySetup(lowPass)
+            vDSP_biquad_DestroySetup(highPass)
+            (lowPass, highPass) = Self.crossover(Double(wanted))
+            built = wanted
+        }
         let subwoofer = planes + Self.subwoofer * block
+        vDSP_biquad(lfePass, lfeState, subwoofer, 1, subwoofer, 1, n)
         for (slot, speaker) in Self.mains.enumerated() {
             let plane = planes + speaker * block
             vDSP_biquad(lowPass, lowState + slot * 6, plane, 1, scratch, 1, n)
@@ -373,5 +403,44 @@ final class BassCrossover {
             vDSP_biquad(highPass, highState + slot * 6, plane, 1, scratch, 1, n)
             plane.update(from: scratch, count: block)
         }
+        vDSP_biquad(lowEnd, lowEndState, subwoofer, 1, subwoofer, 1, n)
+        if inverted.load(ordering: .relaxed) {
+            vDSP_vneg(subwoofer, 1, subwoofer, 1, n)
+        }
+    }
+
+    /// A fourth-order Linkwitz-Riley pair: each side is two identical second-order Butterworth sections.
+    private static func crossover(_ frequency: Double) -> (low: vDSP_biquad_Setup, high: vDSP_biquad_Setup) {
+        let low = lowPass(frequency), high = highPass(frequency, q: 0.5.squareRoot())
+        return (vDSP_biquad_CreateSetup(low + low, 2)!, vDSP_biquad_CreateSetup(high + high, 2)!)
+    }
+
+    // Second-order sections from the Audio EQ Cookbook, as vDSP takes them: b0, b1, b2, a1, a2 over a0.
+
+    private static func lowPass(_ frequency: Double) -> [Double] {
+        let (w, alpha) = Self.angle(frequency, q: 0.5.squareRoot())
+        let b = (1 - cos(w)) / 2
+        return normalized([b, 2 * b, b], [1 + alpha, -2 * cos(w), 1 - alpha])
+    }
+
+    private static func highPass(_ frequency: Double, q: Double) -> [Double] {
+        let (w, alpha) = Self.angle(frequency, q: q)
+        let b = (1 + cos(w)) / 2
+        return normalized([b, -2 * b, b], [1 + alpha, -2 * cos(w), 1 - alpha])
+    }
+
+    private static func peaking(_ frequency: Double, q: Double, decibels: Double) -> [Double] {
+        let (w, alpha) = Self.angle(frequency, q: q)
+        let a = pow(10, decibels / 40)
+        return normalized([1 + alpha * a, -2 * cos(w), 1 - alpha * a], [1 + alpha / a, -2 * cos(w), 1 - alpha / a])
+    }
+
+    private static func angle(_ frequency: Double, q: Double) -> (w: Double, alpha: Double) {
+        let w = 2 * Double.pi * frequency / sampleRate
+        return (w, sin(w) / (2 * q))
+    }
+
+    private static func normalized(_ b: [Double], _ a: [Double]) -> [Double] {
+        [b[0] / a[0], b[1] / a[0], b[2] / a[0], a[1] / a[0], a[2] / a[0]]
     }
 }

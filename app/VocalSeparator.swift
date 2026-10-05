@@ -218,9 +218,7 @@ final class VocalModel {
 extension VocalModel {
     /// The compiled model once downloaded; it is too large to ship inside the app.
     static var location: URL {
-        URL.applicationSupportDirectory
-            .appending(path: Bundle.main.bundleIdentifier ?? "OpenSpatial")
-            .appending(path: "HTDemucsVocals.mlmodelc")
+        Download.folder.appending(path: "HTDemucsVocals.mlmodelc")
     }
 
     static var isDownloaded: Bool {
@@ -236,64 +234,17 @@ extension VocalModel {
         let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let archive = folder.appending(path: "HTDemucsVocals.mlpackage.zip")
-        let running = OSAllocatedUnfairLock<URLSessionDownloadTask?>(initialState: nil)
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                var observation: NSKeyValueObservation?
-                let task = URLSession.shared.downloadTask(with: AppLinks.separationModel) { url, response, error in
-                    observation?.invalidate()
-                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                    guard error == nil, let url, status == 200 else {
-                        continuation.resume(throwing: error ?? ModelError(message: HTTPURLResponse.localizedString(forStatusCode: status)))
-                        return
-                    }
-                    // The system deletes the downloaded file once this handler returns.
-                    do {
-                        try FileManager.default.moveItem(at: url, to: archive)
-                        continuation.resume()
-                    } catch {
-                        continuation.resume(throwing: error)
-                    }
-                }
-                let percent = OSAllocatedUnfairLock(initialState: -1)
-                observation = task.progress.observe(\.fractionCompleted) { reported, _ in
-                    let now = Int(reported.fractionCompleted * 100)
-                    if percent.withLock({ last in defer { last = now }; return last != now }) {
-                        progress(Double(now) / 100)
-                    }
-                }
-                running.withLock { $0 = task }
-                task.resume()
-            }
-        } onCancel: {
-            running.withLock { $0?.cancel() }
-        }
-        guard try sha256(of: archive) == digest else {
-            throw ModelError(message: String(localized: "error.separation.damaged"))
-        }
-        let unzip = Process()
-        unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        unzip.arguments = ["-x", "-k", archive.path, folder.path]
-        try unzip.run()
-        unzip.waitUntilExit()
-        guard unzip.terminationStatus == 0 else {
-            throw ModelError(message: String(localized: "error.separation.damaged"))
-        }
+        try await Download.unpack(
+            AppLinks.separationModel,
+            digest: digest,
+            into: folder,
+            damaged: String(localized: "error.separation.damaged"),
+            progress: progress
+        )
         let compiled = try await MLModel.compileModel(at: folder.appending(path: "HTDemucsVocals.mlpackage"))
         try FileManager.default.createDirectory(at: location.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: location)
         try FileManager.default.moveItem(at: compiled, to: location)
-    }
-
-    private static func sha256(of url: URL) throws -> String {
-        let file = try FileHandle(forReadingFrom: url)
-        defer { try? file.close() }
-        var hash = SHA256()
-        while let chunk = try file.read(upToCount: 1 << 20), !chunk.isEmpty {
-            hash.update(data: chunk)
-        }
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }
 

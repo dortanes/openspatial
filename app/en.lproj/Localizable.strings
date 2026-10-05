@@ -49,6 +49,15 @@
 "settings.sound.separate.downloading %lld" = "Downloading the model, %lld%%";
 "settings.sound.separate.starting" = "Starting the model";
 "settings.sound.roomReverb %lld" = "Room reverb %lld%%";
+"settings.sound.room" = "Room";
+"settings.sound.room.detail" = "Where the speakers play. Rooms beyond the first two download when chosen.";
+"settings.sound.room.downloading %lld" = "Downloading the room, %lld%%";
+"settings.sound.room.loading" = "Preparing the room";
+"room.none" = "No room";
+"room.controlRoom1" = "Control room";
+"room.controlRoom7" = "Second control room";
+"room.smallHall" = "Small hall";
+"room.largeHall" = "Large hall";
 "settings.effects" = "Effects";
 "settings.effects.gain %+.1f" = "Boost %+.1f dB";
 "settings.effects.gain.detail" = "Makes everything louder when the system volume at its top isn't enough.";
@@ -80,6 +89,13 @@
 "settings.speakers.mute.help" = "Silence this speaker";
 "settings.speakers.reset" = "Reset levels";
 "settings.speakers.deviceChannels" = "Channels from apps";
+"settings.subwoofer" = "Subwoofer";
+"settings.subwoofer.crossover %lld" = "Crossover %lld Hz";
+"settings.subwoofer.crossover.detail" = "Bass below this frequency plays from the subwoofer instead of the speakers.";
+"settings.subwoofer.phase" = "Phase";
+"settings.subwoofer.phase.detail" = "At 0° the subwoofer blends evenly with the speakers; 180° leaves a dip in the bass around the crossover.";
+"settings.subwoofer.phase.normal" = "0°";
+"settings.subwoofer.phase.inverted" = "180°";
 "speakers.deviceChannel %lld" = "Channel %lld";
 
 /* Head tracking */
@@ -121,7 +137,7 @@
 "about.notice.driver.source" = "Driver source";
 "about.notice.driver.license" = "GPL-3.0";
 "about.notice.room.title" = "Room measurements";
-"about.notice.room.body" = "Speaker responses come from the WDR Spatial Audio Impulse Response Compilation by TH Köln (P. Stade, B. Bernschütz, M. Rühl, 2012), licensed under CC BY-SA 3.0. Changes: converted, equalized and re-aimed around the listener.";
+"about.notice.room.body" = "The rooms come from the WDR Spatial Audio Impulse Response Compilation by TH Köln (P. Stade, B. Bernschütz, M. Rühl, 2012), and No room from the Neumann KU 100 far-field HRIRs by B. Bernschütz, TH Köln, both licensed under CC BY-SA 3.0. Changes: converted, equalized, re-aimed around the listener and shortened.";
 "about.notice.room.source" = "Measurements";
 "about.notice.room.license" = "CC BY-SA 3.0";
 "about.notice.separation.title" = "Separation model";
@@ -137,7 +153,9 @@
 "error.driverInstall %@" = "The audio driver didn't install: %@ Click Install driver to try again.";
 "error.outputStart %@" = "Sound output failed to start: %@";
 "error.outputDevice %@" = "Sound can't play on this device: %@";
-"error.separation %@" = "AI surround can't start, so stereo spreads without it. %@";
+"error.room %@" = "The room can't load, so the speakers stay where they were. %@";
+"error.room.damaged" = "The downloaded room doesn't match the published one. Pick another room, then this one again, to download it anew.";
+"error.separation %@" ="AI surround can't start, so stereo spreads without it. %@";
 "error.separation.damaged" = "The downloaded model doesn't match the published one. Turn AI surround off and on to download it again.";
 "error.sampleRate %@ %lld" = "Set %@ to %lld Hz in Audio MIDI Setup.";
 "error.capture %@ %lld" = "%@ can't be captured (error %lld).";

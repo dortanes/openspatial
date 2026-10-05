@@ -3,7 +3,8 @@ import AVFoundation
 import os
 import Synchronization
 
-/// Binaural responses of one source over a set of positions, laid out as [position][ear][tap].
+/// Binaural responses of one source over a set of positions, laid out as [position][ear][tap] and stored as
+/// little-endian 16-bit floats.
 struct ResponseTable {
     let positions: Int
     let length: Int
@@ -11,29 +12,42 @@ struct ResponseTable {
 
     init(contentsOf url: URL, positions: Int, length: Int) throws {
         let data = try Data(contentsOf: url, options: .alwaysMapped)
-        samples = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
-        guard samples.count == positions * 2 * length else {
+        guard data.count == positions * 2 * length * MemoryLayout<Float16>.size else {
             throw CocoaError(.fileReadCorruptFile)
         }
+        samples = data.withUnsafeBytes { $0.bindMemory(to: Float16.self).map(Float.init) }
         self.positions = positions
         self.length = length
     }
 }
 
-/// A control room measured with a dummy head.
-struct MeasuredRoomData {
+/// A room measured with a dummy head, or the head alone without a room, as room/export.py writes it:
+/// `<name>.json` with the sizes, `<name>_ring.f16` and, for a room with a long reverberation, `<name>_tails.f16`.
+struct RoomResponses {
     /// One loudspeaker re-aimed around the head; positions are source azimuths in degrees, clockwise from ahead.
     let ring: ResponseTable
+    /// What follows the ring's responses, for one loudspeaker at each of `tailAzimuths`. It stays put as the
+    /// head turns: late reverberation arrives from every direction alike.
+    let tails: ResponseTable?
+    let tailAzimuths: [Double]
 
-    static func load(from directory: URL) throws -> MeasuredRoomData {
+    static func load(_ name: String, from directory: URL) throws -> RoomResponses {
         struct Header: Decodable {
             let length: Int
             let ringSize: Int
+            let tailLength: Int
+            let tailAzimuths: [Double]
         }
-        let header = try JSONDecoder().decode(Header.self, from: Data(contentsOf: directory.appending(path: "cr1.json")))
-        return MeasuredRoomData(
-            ring: try ResponseTable(contentsOf: directory.appending(path: "cr1_ring.f32"), positions: header.ringSize, length: header.length)
+        let header = try JSONDecoder().decode(Header.self, from: Data(contentsOf: directory.appending(path: "\(name).json")))
+        let ring = try ResponseTable(
+            contentsOf: directory.appending(path: "\(name)_ring.f16"), positions: header.ringSize, length: header.length
         )
+        let tails = header.tailLength == 0 ? nil : try ResponseTable(
+            contentsOf: directory.appending(path: "\(name)_tails.f16"),
+            positions: header.tailAzimuths.count,
+            length: header.tailLength
+        )
+        return RoomResponses(ring: ring, tails: tails, tailAzimuths: header.tailAzimuths)
     }
 }
 
@@ -117,20 +131,50 @@ final class FilterBank {
     }
 }
 
-/// Uniformly partitioned overlap-save convolution of several mono sources into two ears.
-/// Each source reads one filter bank; moving a source crossfades to its new responses over one block.
+/// A room's responses in the frequency domain.
+final class RoomFilters {
+    let ring: FilterBank
+    let tails: FilterBank?
+    let tailAzimuths: [Double]
+    /// Partitions of the ring followed by those of the tails.
+    var partitions: Int { ring.partitions + (tails?.partitions ?? 0) }
+
+    /// Transforms every response; takes a moment for a long room, so call it away from the main thread.
+    init(_ responses: RoomResponses) {
+        ring = FilterBank(table: responses.ring)
+        tails = responses.tails.map(FilterBank.init)
+        tailAzimuths = responses.tailAzimuths
+    }
+
+    /// The tail measured nearest to a loudspeaker at `azimuth` degrees, clockwise from ahead.
+    func tail(nearest azimuth: Double) -> Int {
+        tailAzimuths.indices.min { a, b in
+            abs(remainder(tailAzimuths[a] - azimuth, 360)) < abs(remainder(tailAzimuths[b] - azimuth, 360))
+        } ?? 0
+    }
+}
+
+/// Uniformly partitioned overlap-save convolution of several mono sources into two ears through one room.
+/// Each source reads the room's ring at its own position, then the tail nearest its loudspeaker; moving a
+/// source or changing the room crossfades to the new responses over one block.
 final class BinauralConvolver {
     static let blockSize = 512
     /// Partitions treated as direct sound and early reflections: the first 10.7 ms at 48 kHz.
-    /// In the measured room the first discrete echo arrives at 13 ms, after this boundary.
+    /// In the measured rooms the first discrete echo arrives after this boundary.
     static let earlyPartitions = 1
+    /// The longest room the convolver keeps input for: 2 s at 48 kHz.
+    static let capacity = 188
 
     private let block = BinauralConvolver.blockSize
     private let bins = PackedFFT.bins
     private let sources: Int
-    private let partitions: Int
+    /// Loudspeaker azimuth of each source, for picking its tail.
+    private let azimuths: [Double]
     private let fft = PackedFFT()
-    private let filters: [FilterBank]
+    /// Render thread only: the room in use and the tail of each source in it.
+    private var room: RoomFilters
+    private var tails: [Int]
+    private let nextRoom = OSAllocatedUnfairLock<(filters: RoomFilters, tails: [Int])?>(initialState: nil)
     /// Per source: input spectra ring of [slot][bin].
     private let inputRe, inputIm: [UnsafeMutablePointer<Float>]
     /// Per source: the previous and current input block.
@@ -147,17 +191,17 @@ final class BinauralConvolver {
     private let lateGain = Atomic<UInt32>(Float(1).bitPattern)
     private var slot = 0
 
-    /// One source per entry of `filters`; sources may share a bank.
-    init(filters: [FilterBank]) {
+    /// One source per loudspeaker azimuth, in degrees clockwise from ahead.
+    init(room: RoomFilters, azimuths: [Double]) {
         let block = BinauralConvolver.blockSize
-        let partitionCount = filters[0].partitions
-        precondition(filters.allSatisfy { $0.partitions == partitionCount })
-        self.filters = filters
-        sources = filters.count
-        partitions = partitionCount
-        inputRe = filters.map { _ in Self.zeroed(partitionCount * block) }
-        inputIm = filters.map { _ in Self.zeroed(partitionCount * block) }
-        history = filters.map { _ in Self.zeroed(2 * block) }
+        precondition(room.partitions <= Self.capacity)
+        self.room = room
+        self.azimuths = azimuths
+        tails = azimuths.map(room.tail(nearest:))
+        sources = azimuths.count
+        inputRe = azimuths.map { _ in Self.zeroed(Self.capacity * block) }
+        inputIm = azimuths.map { _ in Self.zeroed(Self.capacity * block) }
+        history = azimuths.map { _ in Self.zeroed(2 * block) }
         accRe = Self.zeroed(block)
         accIm = Self.zeroed(block)
         lateRe = Self.zeroed(block)
@@ -169,11 +213,11 @@ final class BinauralConvolver {
         for i in 0..<block {
             ramp[i] = Float(i + 1) / Float(block)
         }
-        current = .allocate(capacity: filters.count)
-        current.initialize(repeating: 0, count: filters.count)
-        next = .allocate(capacity: filters.count)
-        next.initialize(repeating: 0, count: filters.count)
-        targets = OSAllocatedUnfairLock(initialState: [Int](repeating: 0, count: filters.count))
+        current = .allocate(capacity: sources)
+        current.initialize(repeating: 0, count: sources)
+        next = .allocate(capacity: sources)
+        next.initialize(repeating: 0, count: sources)
+        targets = OSAllocatedUnfairLock(initialState: [Int](repeating: 0, count: sources))
     }
 
     deinit {
@@ -184,9 +228,17 @@ final class BinauralConvolver {
         next.deallocate()
     }
 
-    /// Moves a source to a position in its filter bank. Safe from any thread.
+    /// Moves a source to a position on the room's ring. Safe from any thread.
     func setPosition(_ position: Int, source: Int) {
         targets.withLock { $0[source] = position }
+    }
+
+    /// Changes the room at the next block, crossfading into it. Every room has the same ring positions.
+    /// Safe from any thread.
+    func setRoom(_ filters: RoomFilters) {
+        precondition(filters.partitions <= Self.capacity && filters.ring.positions == room.ring.positions)
+        let tails = azimuths.map(filters.tail(nearest:))
+        nextRoom.withLock { $0 = (filters, tails) }
     }
 
     /// Scales the room's late reverberation; 1 keeps the measured room. Safe from any thread.
@@ -199,7 +251,7 @@ final class BinauralConvolver {
         for source in 0..<sources {
             push(inputs + source * block, source: source)
         }
-        render(positions: current, outLeft: outLeft, outRight: outRight)
+        render(room: room, tails: tails, positions: current, outLeft: outLeft, outRight: outRight)
         let moved = targets.withLockIfAvailable { targets -> Bool in
             var moved = false
             for source in 0..<sources {
@@ -208,15 +260,24 @@ final class BinauralConvolver {
             }
             return moved
         } ?? false
-        if moved {
-            render(positions: next, outLeft: fadeLeft, outRight: fadeRight)
+        // Nil when the lock is busy, and nil inside when no room is waiting.
+        let changed = nextRoom.withLockIfAvailable { waiting in
+            defer { waiting = nil }
+            return waiting
+        } ?? nil
+        if moved || changed != nil {
+            if let changed {
+                room = changed.filters
+                tails = changed.tails
+            }
+            render(room: room, tails: tails, positions: next, outLeft: fadeLeft, outRight: fadeRight)
             for i in 0..<block {
                 outLeft[i] += (fadeLeft[i] - outLeft[i]) * ramp[i]
                 outRight[i] += (fadeRight[i] - outRight[i]) * ramp[i]
             }
             current.update(from: next, count: sources)
         }
-        slot = (slot + 1) % partitions
+        slot = (slot + 1) % Self.capacity
     }
 
     private static func zeroed(_ count: Int) -> UnsafeMutablePointer<Float> {
@@ -233,24 +294,38 @@ final class BinauralConvolver {
         fft.forward(frame, re: inputRe[source] + offset, im: inputIm[source] + offset)
     }
 
-    private func render(positions: UnsafePointer<Int>, outLeft: UnsafeMutablePointer<Float>, outRight: UnsafeMutablePointer<Float>) {
-        render(positions: positions, ear: 0, into: outLeft)
-        render(positions: positions, ear: 1, into: outRight)
+    private func render(
+        room: RoomFilters,
+        tails: [Int],
+        positions: UnsafePointer<Int>,
+        outLeft: UnsafeMutablePointer<Float>,
+        outRight: UnsafeMutablePointer<Float>
+    ) {
+        render(room: room, tails: tails, positions: positions, ear: 0, into: outLeft)
+        render(room: room, tails: tails, positions: positions, ear: 1, into: outRight)
     }
 
-    private func render(positions: UnsafePointer<Int>, ear: Int, into out: UnsafeMutablePointer<Float>) {
+    private func render(room: RoomFilters, tails: [Int], positions: UnsafePointer<Int>, ear: Int, into out: UnsafeMutablePointer<Float>) {
         accRe.update(repeating: 0, count: bins)
         accIm.update(repeating: 0, count: bins)
         lateRe.update(repeating: 0, count: bins)
         lateIm.update(repeating: 0, count: bins)
         var gain = Float(bitPattern: lateGain.load(ordering: .relaxed))
-        let used = gain == 0 ? min(partitions, Self.earlyPartitions) : partitions
+        let used = gain == 0 ? min(room.partitions, Self.earlyPartitions) : room.partitions
+        let ring = room.ring
         for source in 0..<sources {
-            let bank = filters[source]
             for p in 0..<used {
-                let x = ((slot - p + partitions) % partitions) * bins
-                let h = ((positions[source] * 2 + ear) * partitions + p) * bins
+                let x = ((slot - p + Self.capacity) % Self.capacity) * bins
                 let early = p < Self.earlyPartitions
+                let bank: FilterBank, response: Int, partition: Int
+                if p < ring.partitions {
+                    (bank, response, partition) = (ring, positions[source], p)
+                } else if let tailBank = room.tails {
+                    (bank, response, partition) = (tailBank, tails[source], p - ring.partitions)
+                } else {
+                    break
+                }
+                let h = ((response * 2 + ear) * bank.partitions + partition) * bins
                 accumulate(inputRe[source] + x, inputIm[source] + x, bank.re + h, bank.im + h, into: early ? accRe : lateRe, early ? accIm : lateIm)
             }
         }
@@ -306,15 +381,15 @@ final class BinauralPlayer {
     private let bypass = Atomic<Bool>(false)
     private let downmixLeft, downmixRight: [Float]
 
-    /// One source channel per entry of `filters`, each folding into stereo with its `downmix` gains when bypassed.
-    init(filters: [FilterBank], source: BlockSource, downmix: [(left: Float, right: Float)]) {
-        precondition(downmix.count == filters.count)
-        convolver = BinauralConvolver(filters: filters)
+    /// One source channel per loudspeaker azimuth, each folding into stereo with its `downmix` gains when bypassed.
+    init(room: RoomFilters, azimuths: [Double], source: BlockSource, downmix: [(left: Float, right: Float)]) {
+        precondition(downmix.count == azimuths.count)
+        convolver = BinauralConvolver(room: room, azimuths: azimuths)
         self.source = source
-        sources = filters.count
+        sources = azimuths.count
         downmixLeft = downmix.map(\.left)
         downmixRight = downmix.map(\.right)
-        inputs = .allocate(capacity: filters.count * block)
+        inputs = .allocate(capacity: azimuths.count * block)
         outLeft = .allocate(capacity: block)
         outRight = .allocate(capacity: block)
         let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
@@ -341,6 +416,10 @@ final class BinauralPlayer {
 
     func setPosition(_ position: Int, source: Int) {
         convolver.setPosition(position, source: source)
+    }
+
+    func setRoom(_ room: RoomFilters) {
+        convolver.setRoom(room)
     }
 
     func setLateGain(_ gain: Float) {
@@ -383,12 +462,15 @@ final class BinauralPlayer {
         if !source.fill(inputs, sources: sources, frames: block) {
             inputs.update(repeating: 0, count: sources * block)
         }
+        let previous = appliedGains
         if let current = gains.withLockIfAvailable({ $0 }) {
             appliedGains = current
         }
-        for source in 0..<min(sources, appliedGains.scalarCount) where appliedGains[source] != 1 {
-            var gain = appliedGains[source]
-            vDSP_vsmul(inputs + source * block, 1, &gain, inputs + source * block, 1, vDSP_Length(block))
+        // A changed gain ramps across the block, so moving the head doesn't click.
+        for source in 0..<min(sources, appliedGains.scalarCount) where previous[source] != 1 || appliedGains[source] != 1 {
+            var start = previous[source]
+            var step = (appliedGains[source] - start) / Float(block)
+            vDSP_vrampmul(inputs + source * block, 1, &start, &step, inputs + source * block, 1, vDSP_Length(block))
         }
         convolver.process(inputs: inputs, outLeft: outLeft, outRight: outRight)
         guard bypass.load(ordering: .relaxed) else { return }

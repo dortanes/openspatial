@@ -24,9 +24,9 @@ SPEAKERS = [ROOT / "sofa" / "BRIR_CR1_KU_MICS_L.sofa", ROOT / "sofa" / "BRIR_CR1
 SOURCE = "https://sofacoustics.org/data/database/thk/"
 
 
-def fetch():
-    """Downloads the speakers' measurements that are not in sofa/ yet."""
-    for path in SPEAKERS:
+def fetch(paths=SPEAKERS):
+    """Downloads the measurements that are not in sofa/ yet."""
+    for path in paths:
         if not path.exists():
             path.parent.mkdir(exist_ok=True)
             print("downloading", path.name)

@@ -3,14 +3,14 @@ set -eu
 cd "$(dirname "$0")"
 app=build/OpenSpatial.app
 version="$(tr -d '[:space:]' < ../version.txt)"
-# The room's response tables come from room/export.py, which downloads the measurements on first run.
-[ -f brir/cr1_ring.f32 ] || uv run ../room/export.py
+# The rooms the app carries come from room/export.py, which downloads the measurements on first run.
+[ -f brir/cr1_ring.f16 ] && [ -f brir/free_ring.f16 ] || uv run ../room/export.py cr1 free
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp Info.plist "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $version" -c "Add :CFBundleVersion string $version" "$app/Contents/Info.plist"
 cp -R en.lproj "$app/Contents/Resources/"
-cp brir/cr1.json brir/cr1_ring.f32 MenuBarIcon.svg "$app/Contents/Resources/"
+cp brir/cr1.json brir/cr1_ring.f16 brir/free.json brir/free_ring.f16 MenuBarIcon.svg "$app/Contents/Resources/"
 # The app installs the driver it carries on first launch.
 [ -d ../driver/OpenSpatial.driver ] || ../driver/build.sh
 cp -R ../driver/OpenSpatial.driver "$app/Contents/Resources/"

@@ -82,9 +82,18 @@ private struct SoundPane: View {
                     separationDetail
                 }
                 .disabled(!model.fillSpeakers)
+            }
+            Section {
+                Picker(selection: $model.room) {
+                    ForEach(Room.allCases, id: \.self) { Text($0.title).tag($0) }
+                } label: {
+                    Text("settings.sound.room")
+                    roomDetail
+                }
                 LabeledContent("settings.sound.roomReverb \(Int((model.roomReverb * 100).rounded()))") {
                     Slider(value: $model.roomReverb, in: 0...1)
                 }
+                .disabled(model.room == .none)
             }
             Section("settings.effects") {
                 LabeledContent {
@@ -110,6 +119,15 @@ private struct SoundPane: View {
         }
         .formStyle(.grouped)
         .navigationTitle(SettingsPane.sound.title)
+    }
+
+    private var roomDetail: Text {
+        switch model.roomStatus {
+        case .ready: Text("settings.sound.room.detail")
+        case .downloading(let fraction): Text("settings.sound.room.downloading \(Int(fraction * 100))")
+        case .loading: Text("settings.sound.room.loading")
+        case .failed(let message): Text(verbatim: message).foregroundStyle(.orange)
+        }
     }
 
     private var separationDetail: Text {
@@ -161,6 +179,26 @@ private struct SpeakersPane: View {
                     }
                 }
                 Button("settings.speakers.reset") { model.resetSpeakerLevels() }
+            }
+            Section("settings.subwoofer") {
+                LabeledContent {
+                    Slider(
+                        value: Binding(get: { Double(model.crossover) }, set: { model.crossover = Int($0) }),
+                        in: Double(BassCrossover.frequencies.lowerBound)...Double(BassCrossover.frequencies.upperBound),
+                        step: 10
+                    )
+                } label: {
+                    Text("settings.subwoofer.crossover \(model.crossover)")
+                    Text("settings.subwoofer.crossover.detail")
+                }
+                Picker(selection: $model.subwooferInverted) {
+                    Text("settings.subwoofer.phase.normal").tag(false)
+                    Text("settings.subwoofer.phase.inverted").tag(true)
+                } label: {
+                    Text("settings.subwoofer.phase")
+                    Text("settings.subwoofer.phase.detail")
+                }
+                .pickerStyle(.segmented)
             }
             Section("settings.speakers.deviceChannels") {
                 ForEach(live.deviceLevels) { channel in

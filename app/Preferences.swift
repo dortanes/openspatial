@@ -20,6 +20,10 @@ struct Preferences: Codable {
     var separateStems = false
     /// Decibels per speaker, in `SurroundChannel` order.
     var speakerLevels = Array(repeating: 0.0, count: SurroundChannel.allCases.count)
+    var room = Room.standard
+    /// Hertz, within `BassCrossover.frequencies`.
+    var crossover = BassCrossover.standardFrequency
+    var subwooferInverted = false
     /// The output device the listener picked, by Core Audio UID.
     var outputDeviceUID: String?
     /// The system output before the app moved it to the driver, by UID; kept until it is restored,
@@ -52,6 +56,11 @@ struct Preferences: Codable {
         speakerLevels = levels.count <= defaults.speakerLevels.count
             ? levels + defaults.speakerLevels.dropFirst(levels.count)
             : defaults.speakerLevels
+        // A room this version doesn't know falls back to the standard one.
+        room = (try? values.decodeIfPresent(Room.self, forKey: .room)) ?? defaults.room
+        let crossover = try values.decodeIfPresent(Int.self, forKey: .crossover)
+        self.crossover = crossover.flatMap { BassCrossover.frequencies.contains($0) ? $0 : nil } ?? defaults.crossover
+        subwooferInverted = try values.decodeIfPresent(Bool.self, forKey: .subwooferInverted) ?? defaults.subwooferInverted
         outputDeviceUID = try values.decodeIfPresent(String.self, forKey: .outputDeviceUID)
         previousSystemOutputUID = try values.decodeIfPresent(String.self, forKey: .previousSystemOutputUID)
     }
