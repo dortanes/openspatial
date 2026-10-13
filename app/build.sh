@@ -4,7 +4,9 @@ cd "$(dirname "$0")"
 app=build/OpenSpatial.app
 version="$(tr -d '[:space:]' < ../version.txt)"
 # The rooms the app carries come from room/export.py, which downloads the measurements on first run.
-[ -f brir/cr1_ring.f16 ] && [ -f brir/free_ring.f16 ] || uv run ../room/export.py cr1 free
+if [ ! -f brir/cr1_ring.f16 ] || [ ! -f brir/free_ring.f16 ]; then
+    uv run ../room/export.py cr1 free
+fi
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp Info.plist "$app/Contents/Info.plist"
