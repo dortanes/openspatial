@@ -35,10 +35,17 @@
 "notice.outputNotSet" = "Apps don't play through OpenSpatial yet. Choose OpenSpatial as the output in Sound settings.";
 
 /* Settings categories */
+"settings.general" = "General";
 "settings.sound" = "Sound";
 "settings.speakers" = "Speakers";
 "settings.tracking" = "Head tracking";
 "settings.about" = "About";
+
+/* General */
+"settings.general.launch" = "Open at login";
+"settings.general.launch.detail" = "OpenSpatial starts in the menu bar when you log in.";
+"settings.general.launch.approval" = "Allow OpenSpatial in System Settings > General > Login Items to start it at login.";
+"settings.general.launch.openSettings" = "Open Login Items";
 
 /* Sound */
 "settings.sound.output" = "Output device";

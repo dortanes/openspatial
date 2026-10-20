@@ -68,6 +68,7 @@ Get the latest version from [Releases](https://github.com/dortanes/openspatial/r
 
 Tips:
 
+- Turn on **Open at login** in **Settings → General** to have OpenSpatial running after every restart.
 - **AI surround** works best for music. Stereo plays about 2 seconds late with it on, so turn it off for videos and games.
 - If the front isn't where your screen is, look at the screen and click **Center on current position** in **Settings → Head tracking**.
 - **Settings → Speakers** plays each speaker on its own, so you can check where it sits and set its level.

@@ -1,13 +1,15 @@
 import SafariServices
+import ServiceManagement
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case sound, speakers, headTracking, permissions, about
+    case general, sound, speakers, headTracking, permissions, about
 
     var id: Self { self }
 
     var title: LocalizedStringKey {
         switch self {
+        case .general: "settings.general"
         case .sound: "settings.sound"
         case .speakers: "settings.speakers"
         case .headTracking: "settings.tracking"
@@ -18,6 +20,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .general: "gearshape"
         case .sound: "speaker.wave.2"
         case .speakers: "hifispeaker.2"
         case .headTracking: "face.smiling"
@@ -44,6 +47,7 @@ struct SettingsView: View {
             .navigationSplitViewColumnWidth(min: 170, ideal: 190)
         } detail: {
             switch SettingsPane(rawValue: pane) ?? .sound {
+            case .general: GeneralPane()
             case .sound: SoundPane(model: model)
             case .speakers: SpeakersPane(model: model, live: live)
             case .headTracking: HeadTrackingPane(model: model, live: live)
@@ -57,6 +61,51 @@ struct SettingsView: View {
 
     private var selection: Binding<SettingsPane?> {
         Binding(get: { SettingsPane(rawValue: pane) }, set: { pane = ($0 ?? .sound).rawValue })
+    }
+}
+
+private struct GeneralPane: View {
+    /// Owned by macOS: the user can also change it in System Settings > General > Login Items.
+    @State private var launch = SMAppService.mainApp.status
+    @State private var launchError: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: Binding(get: { launch == .enabled || launch == .requiresApproval }, set: setLaunch)) {
+                    Text("settings.general.launch")
+                    if let launchError {
+                        Text(verbatim: launchError).foregroundStyle(.orange)
+                    } else if launch == .requiresApproval {
+                        Text("settings.general.launch.approval")
+                    } else {
+                        Text("settings.general.launch.detail")
+                    }
+                }
+                if launch == .requiresApproval {
+                    Button("settings.general.launch.openSettings") { SMAppService.openSystemSettingsLoginItems() }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(SettingsPane.general.title)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            launch = SMAppService.mainApp.status
+        }
+    }
+
+    private func setLaunch(_ on: Bool) {
+        do {
+            if on {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchError = nil
+        } catch {
+            launchError = error.localizedDescription
+        }
+        launch = SMAppService.mainApp.status
     }
 }
 
