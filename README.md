@@ -28,6 +28,7 @@
 ## Features
 
 - **Any headphones, any app.** Wired or wireless, over-ear or in-ear; browsers, players, games and music apps.
+- **Netflix in 5.1.** Netflix sends Safari only stereo. The Safari extension that comes with OpenSpatial gets the 5.1 track, from Atmos titles too.
 - **Native, top to bottom.** Written in Swift, with its own Core Audio driver and AI that runs on the Neural Engine through Core ML.
 - **Speakers that stay put.** With head tracking on, your Mac's camera follows your head, so the front stays in front.
 - **Surround from stereo.** Stereo spreads to every speaker around you, and 5.1 gets its missing back speakers.
@@ -36,7 +37,6 @@
 - **Louder and even.** Boost quiet apps, even out loud and quiet scenes, and shape the tone.
 - **See the sound.** Watch the speakers play and where each sound comes from in a 3D view of the room.
 - **Works with Wine.** Windows games play in full 7.1.
-- **Netflix in surround.** Its Safari extension gets Netflix to send 5.1 instead of stereo.
 
 ## Screenshots
 
@@ -64,6 +64,7 @@ Get the latest version from [Releases](https://github.com/dortanes/openspatial/r
 3. Allow the microphone when macOS asks: it is how OpenSpatial hears your apps. Allow the camera if you want head tracking.
 4. Click the menu bar icon, open **Settings**, and choose your headphones under **Sound → Output device**.
 5. Play anything. The menu bar panel shows what is playing and lets you turn spatial sound, AI surround and head tracking on and off.
+6. For Netflix in 5.1, click **Open in Safari** in **Settings → Sound**, turn on OpenSpatial, then allow it on netflix.com and reload the page.
 
 Tips:
 
@@ -71,11 +72,9 @@ Tips:
 - If the front isn't where your screen is, look at the screen and click **Center on current position** in **Settings → Head tracking**.
 - **Settings → Speakers** plays each speaker on its own, so you can check where it sits and set its level.
 - **3D view** in the menu bar panel shows the room live.
-- For Netflix in Safari, click **Open in Safari** in **Settings → Sound**, turn on OpenSpatial and allow it on netflix.com.
-
 ## Privacy
 
-Sound and camera frames never leave your Mac, and camera frames are never stored. OpenSpatial goes online only to download the AI surround model when you turn it on. Without the camera, everything but head tracking works.
+Sound and camera frames never leave your Mac, and camera frames are never stored. OpenSpatial goes online only to download the AI surround model when you turn it on and a room when you choose it. The Safari extension runs only on netflix.com and changes nothing but the sound format Netflix is asked for. Without the camera, everything but head tracking works.
 
 ## Build from source
 
