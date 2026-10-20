@@ -73,6 +73,8 @@ Tips:
 - If the front isn't where your screen is, look at the screen and click **Center on current position** in **Settings → Head tracking**.
 - **Settings → Speakers** plays each speaker on its own, so you can check where it sits and set its level.
 - **3D view** in the menu bar panel shows the room live.
+- For Windows games in 7.1, open the bottle's Wine configuration, go to **Audio**, select OpenSpatial under **Speaker configuration** and set **Speakers** to **7.1 Surround**. This needs Wine 11.7 or later and has been tested only with CrossOver Preview.
+
 ## Privacy
 
 Sound and camera frames never leave your Mac, and camera frames are never stored. OpenSpatial goes online only to download the AI surround model when you turn it on and a room when you choose it. The Safari extension runs only on netflix.com and changes nothing but the sound format Netflix is asked for. Without the camera, everything but head tracking works.
