@@ -7,6 +7,7 @@
 
 * **safari:** ✨ ask Netflix for surround in Safari ([fbaf1db](https://github.com/dortanes/openspatial/commit/fbaf1dbc5ef5fdfc84612e0f40fb805bde21814b))
 * **settings:** ✨ open OpenSpatial at login ([9c6f509](https://github.com/dortanes/openspatial/commit/9c6f509443f3840bc3e81984230e81d62d3077ae))
+* **speakers:** ✨ switch the channel layout for apps ([c8b87a4](https://github.com/dortanes/openspatial/commit/c8b87a452bbe86bcf4be200ab6b7c927c04a6ce9))
 
 ## [1.1.0](https://github.com/dortanes/openspatial/compare/v1.0.0...v1.1.0) (2026-10-05)
 
