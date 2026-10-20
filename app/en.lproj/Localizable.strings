@@ -42,6 +42,10 @@
 
 /* Sound */
 "settings.sound.output" = "Output device";
+"settings.netflix" = "Netflix in Safari";
+"settings.netflix.detail" = "Turn on the OpenSpatial extension in Safari and allow it on netflix.com to get 5.1 instead of stereo.";
+"settings.netflix.on" = "On";
+"settings.netflix.open" = "Open in Safari";
 "settings.sound.fill" = "Fill empty speakers";
 "settings.sound.fill.detail" = "Stereo spreads to every speaker; 5.1 gets back speakers.";
 "settings.sound.separate" = "AI surround";

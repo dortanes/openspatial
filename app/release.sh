@@ -16,8 +16,10 @@ dmg="$out/OpenSpatial-$version-macos-arm64.dmg"
 rm -rf "$out"
 mkdir -p "$image"
 ditto build/OpenSpatial.app "$app"
-# Inside out: the driver the app installs first, then the app around it.
+# Inside out: the driver the app installs and the Safari extension first, then the app around them.
 codesign --force --options runtime --timestamp --sign "$identity" "$app/Contents/Resources/OpenSpatial.driver"
+codesign --force --options runtime --timestamp --entitlements ../safari/Extension.entitlements --sign "$identity" \
+  "$app/Contents/PlugIns/Safari.appex"
 codesign --force --options runtime --timestamp --entitlements OpenSpatial.entitlements --sign "$identity" "$app"
 codesign --verify --deep --strict "$app"
 

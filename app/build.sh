@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
+# Safari skips an ad-hoc signed web extension, so a build for trying it in Safari needs IDENTITY, such as "Apple Development".
+identity="${IDENTITY:--}"
 app=build/OpenSpatial.app
 version="$(tr -d '[:space:]' < ../version.txt)"
 # The rooms the app carries come from room/export.py, which downloads the measurements on first run.
@@ -23,5 +25,15 @@ xcrun actool "$PWD/AppIcon.icon" --compile "$app/Contents/Resources" \
   --enable-on-demand-resources NO --output-partial-info-plist build/AppIcon.plist \
   --errors --warnings >/dev/null
 xcrun swiftc -O -parse-as-library -target arm64-apple-macos15.0 ./*.swift -o "$app/Contents/MacOS/OpenSpatial"
-codesign --force --sign - "$app"
+# Safari finds the web extension in the app once the app has run; the extension's icon is the app's.
+extension="$app/Contents/PlugIns/Safari.appex"
+mkdir -p "$extension/Contents/MacOS"
+cp ../safari/Info.plist "$extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $version" -c "Add :CFBundleVersion string $version" "$extension/Contents/Info.plist"
+cp -R ../safari/Resources "$extension/Contents/"
+sips -s format png -Z 512 "$app/Contents/Resources/AppIcon.icns" --out "$extension/Contents/Resources/icon.png" >/dev/null
+xcrun swiftc -O -parse-as-library -application-extension -target arm64-apple-macos15.0 ../safari/*.swift \
+  -Xlinker -e -Xlinker _NSExtensionMain -o "$extension/Contents/MacOS/Safari"
+codesign --force --sign "$identity" --entitlements ../safari/Extension.entitlements "$extension"
+codesign --force --sign "$identity" "$app"
 echo "$app"

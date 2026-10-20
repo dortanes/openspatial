@@ -8,12 +8,14 @@ You need a Mac with Apple silicon, Xcode 26 or later and [uv](https://docs.astra
 app/build.sh
 ```
 
-It builds `app/build/OpenSpatial.app`, ad-hoc signed. The first run also:
+It builds `app/build/OpenSpatial.app`, ad-hoc signed unless `IDENTITY` names a signing identity. The first run also:
 
 - downloads the room measurements into `room/sofa` and exports the tables of the two rooms the app carries into `app/brir` with `room/export.py cr1 free`;
 - downloads BlackHole 0.7.1 into `driver/blackhole`, applies `driver/openspatial.patch` and builds the audio driver with `driver/build.sh`.
 
 The app carries the driver and installs it on launch whenever the installed one has a different build. Raise `build` in `driver/build.sh` with every driver change.
+
+The app also carries the Safari web extension in `safari`, which makes Netflix send surround sound. Safari doesn't load an ad-hoc signed extension, so to try it, build with your signing identity: `IDENTITY="Apple Development" app/build.sh`.
 
 `uv run room/export.py cr7 sbs lbs` builds the rooms the app downloads as `room/out/<room>.zip` and prints their SHA-256. They are published as the `rooms-1` release, and `app/Room.swift` holds each one's SHA-256; a changed room goes out as a new release with the new digests.
 

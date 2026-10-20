@@ -36,6 +36,7 @@
 - **Louder and even.** Boost quiet apps, even out loud and quiet scenes, and shape the tone.
 - **See the sound.** Watch the speakers play and where each sound comes from in a 3D view of the room.
 - **Works with Wine.** Windows games play in full 7.1.
+- **Netflix in surround.** Its Safari extension gets Netflix to send 5.1 instead of stereo.
 
 ## Screenshots
 
@@ -70,6 +71,7 @@ Tips:
 - If the front isn't where your screen is, look at the screen and click **Center on current position** in **Settings → Head tracking**.
 - **Settings → Speakers** plays each speaker on its own, so you can check where it sits and set its level.
 - **3D view** in the menu bar panel shows the room live.
+- For Netflix in Safari, click **Open in Safari** in **Settings → Sound**, turn on OpenSpatial and allow it on netflix.com.
 
 ## Privacy
 

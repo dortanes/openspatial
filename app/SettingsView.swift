@@ -1,3 +1,4 @@
+import SafariServices
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
@@ -73,6 +74,9 @@ private struct SoundPane: View {
                 }
             }
             Section {
+                NetflixRow()
+            }
+            Section {
                 Toggle(isOn: $model.fillSpeakers) {
                     Text("settings.sound.fill")
                     Text("settings.sound.fill.detail")
@@ -136,6 +140,51 @@ private struct SoundPane: View {
         case .downloading(let fraction): Text("settings.sound.separate.downloading \(Int(fraction * 100))")
         case .starting: Text("settings.sound.separate.starting")
         case .failed(let message): Text(verbatim: message).foregroundStyle(.orange)
+        }
+    }
+}
+
+/// Whether the Safari extension the app carries, which asks Netflix for surround sound, is on.
+private struct NetflixRow: View {
+    private static let extensionID = Bundle.main.bundleIdentifier! + ".safari"
+    @State private var enabled: Result<Bool, any Error>?
+
+    var body: some View {
+        LabeledContent {
+            HStack {
+                if case .success(true) = enabled {
+                    Text("settings.netflix.on").foregroundStyle(.secondary)
+                }
+                Button("settings.netflix.open") { Task { await open() } }
+            }
+        } label: {
+            Text("settings.netflix")
+            if case .failure(let error) = enabled {
+                Text(verbatim: error.localizedDescription).foregroundStyle(.orange)
+            } else {
+                Text("settings.netflix.detail")
+            }
+        }
+        .task { await refresh() }
+        // The extension is turned on in Safari, so its state changes while the app is in the background.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await refresh() }
+        }
+    }
+
+    private func refresh() async {
+        do {
+            enabled = .success(try await SFSafariExtensionManager.stateOfSafariExtension(withIdentifier: Self.extensionID).isEnabled)
+        } catch {
+            enabled = .failure(error)
+        }
+    }
+
+    private func open() async {
+        do {
+            try await SFSafariApplication.showPreferencesForExtension(withIdentifier: Self.extensionID)
+        } catch {
+            enabled = .failure(error)
         }
     }
 }

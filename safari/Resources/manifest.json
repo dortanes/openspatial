@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "default_locale": "en",
+  "name": "__MSG_name__",
+  "description": "__MSG_description__",
+  "version": "1.0",
+  "icons": { "512": "icon.png" },
+  "host_permissions": ["*://*.netflix.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.netflix.com/*"],
+      "js": ["netflix.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
