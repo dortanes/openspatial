@@ -100,6 +100,10 @@
 "settings.speakers.mute.help" = "Silence this speaker";
 "settings.speakers.reset" = "Reset levels";
 "settings.speakers.deviceChannels" = "Channels from apps";
+"settings.speakers.layout" = "Channel layout";
+"settings.speakers.layout.detail" = "Mac apps play their back speakers with Mac, Windows games in Wine play 7.1 with Windows. Restart playback after switching.";
+"settings.speakers.layout.mac" = "Mac";
+"settings.speakers.layout.windows" = "Windows";
 "settings.subwoofer" = "Subwoofer";
 "settings.subwoofer.crossover %lld" = "Crossover %lld Hz";
 "settings.subwoofer.crossover.detail" = "Bass below this frequency plays from the subwoofer instead of the speakers.";

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the OpenSpatial loopback driver: BlackHole with 8 channels and a speaker layout Wine maps to Windows 7.1.
+# Builds the OpenSpatial loopback driver: BlackHole with 8 channels and speaker labels the app sets.
 # Fetches BlackHole v0.7.1 into blackhole/ and applies openspatial.patch on first run.
 set -eu
 cd "$(dirname "$0")"
@@ -11,7 +11,7 @@ src=blackhole/BlackHole
 name=OpenSpatial
 bundle_id=io.github.dortanes.openspatial.driver
 # The app replaces an installed driver whose build differs from the one it carries; raise it with every driver change.
-build=1
+build=2
 # A factory UUID of its own, so the driver loads alongside a stock BlackHole.
 factory=6eb80adc-1b64-4210-92f0-8c373371c118
 driver=$name.driver

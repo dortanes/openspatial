@@ -299,6 +299,14 @@ private struct SpeakersPane: View {
                 .pickerStyle(.segmented)
             }
             Section("settings.speakers.deviceChannels") {
+                Picker(selection: $model.channelLayout) {
+                    Text("settings.speakers.layout.mac").tag(ChannelLayout.mac)
+                    Text("settings.speakers.layout.windows").tag(ChannelLayout.windows)
+                } label: {
+                    Text("settings.speakers.layout")
+                    Text("settings.speakers.layout.detail")
+                }
+                .pickerStyle(.segmented)
                 ForEach(live.deviceLevels) { channel in
                     LabeledContent {
                         LevelBar(level: channel.level)

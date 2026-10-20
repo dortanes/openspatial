@@ -83,6 +83,8 @@ final class Model: ObservableObject {
     @Published var crossover: Int { didSet { audio.setCrossover(crossover); save() } }
     /// The subwoofer with its polarity flipped, which cancels bass around the crossover.
     @Published var subwooferInverted: Bool { didSet { audio.setSubwooferInverted(subwooferInverted); save() } }
+    /// Capture restarts with it, because the channels it reads follow the driver's labels.
+    @Published var channelLayout: ChannelLayout { didSet { updateCapture(); save() } }
     /// Devices the rendered sound can play on; never the driver, which would feed back.
     @Published private(set) var outputDevices: [AudioDevice] = []
     @Published var outputDeviceID: AudioObjectID = 0 {
@@ -175,6 +177,7 @@ final class Model: ObservableObject {
         room = saved.room
         crossover = saved.crossover
         subwooferInverted = saved.subwooferInverted
+        channelLayout = saved.channelLayout
         preferredOutputUID = saved.outputDeviceUID
         previousSystemOutputUID = saved.previousSystemOutputUID
 
@@ -306,6 +309,7 @@ final class Model: ObservableObject {
         preferences.room = room
         preferences.crossover = crossover
         preferences.subwooferInverted = subwooferInverted
+        preferences.channelLayout = channelLayout
         preferences.outputDeviceUID = preferredOutputUID
         preferences.previousSystemOutputUID = previousSystemOutputUID
         preferences.save()
@@ -463,6 +467,7 @@ final class Model: ObservableObject {
         live.deviceLevels = []
         inputLayout = .silent
         guard microphoneAllowed, let device = driverDevice else { return }
+        device.setOutputChannelLabels(channelLayout.labels)
         do {
             try audio.startCapture(device)
             audioError = nil

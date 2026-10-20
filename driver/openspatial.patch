@@ -1,5 +1,5 @@
 diff --git a/BlackHole/BlackHole.c b/BlackHole/BlackHole.c
-index ac516ef..04ca56e 100644
+index ac516ef..047c94e 100644
 --- a/BlackHole/BlackHole.c
 +++ b/BlackHole/BlackHole.c
 @@ -238,6 +238,12 @@ struct ObjectInfo {
@@ -15,7 +15,23 @@ index ac516ef..04ca56e 100644
  #ifndef kEnableVolumeControl
  #define                             kEnableVolumeControl                 true
  #endif
-@@ -778,7 +784,7 @@ static OSStatus	BlackHole_Initialize(AudioServerPlugInDriverRef inDriver, AudioS
+@@ -289,6 +295,15 @@ static UInt32                       kClockSource_NumberItems            = 2;
+ #define                             kClockSource_InternalAdjustable    "Internal Adjustable"
+ static UInt32                       gClockSource_Value                  = 0;
+ static bool                         gPitch_Adjust_Enabled               = false;
++#if kNumber_Of_Channels == 8
++//	The speaker labels the device reports, settable by clients. The default is Core Audio's 7.1, where
++//	surround is the side pair; Wine maps only surround and surround direct to Windows 7.1.
++static AudioChannelLabel            gDevice_ChannelLabels[8]            = {
++	kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
++	kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround,
++	kAudioChannelLabel_RearSurroundLeft, kAudioChannelLabel_RearSurroundRight
++};
++#endif
+ 
+ static struct ObjectInfo            kDevice_ObjectList[]                = {
+ #if kDevice_HasInput
+@@ -778,7 +793,7 @@ static OSStatus	BlackHole_Initialize(AudioServerPlugInDriverRef inDriver, AudioS
  	//	set the box name directly as a last resort
  	if(gBox_Name == NULL)
  	{
@@ -24,7 +40,7 @@ index ac516ef..04ca56e 100644
  	}
  	
  	//	calculate the host ticks per frame
-@@ -1910,10 +1916,10 @@ static OSStatus	BlackHole_GetBoxPropertyData(AudioServerPlugInDriverRef inDriver
+@@ -1910,10 +1925,10 @@ static OSStatus	BlackHole_GetBoxPropertyData(AudioServerPlugInDriverRef inDriver
  		case kAudioObjectPropertyModelName:
  			//	This is the human readable name of the maker of the box.
  			FailWithAction(inDataSize < sizeof(CFStringRef), theAnswer = kAudioHardwareBadPropertySizeError, Done, "BlackHole_GetBoxPropertyData: not enough space for the return value of kAudioObjectPropertyManufacturer for the box");
@@ -37,30 +53,80 @@ index ac516ef..04ca56e 100644
  		case kAudioObjectPropertyManufacturer:
  			//	This is the human readable name of the maker of the box.
  			FailWithAction(inDataSize < sizeof(CFStringRef), theAnswer = kAudioHardwareBadPropertySizeError, Done, "BlackHole_GetBoxPropertyData: not enough space for the return value of kAudioObjectPropertyManufacturer for the box");
-@@ -2812,9 +2818,22 @@ static OSStatus	BlackHole_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
+@@ -2254,12 +2269,15 @@ static OSStatus	BlackHole_IsDevicePropertySettable(AudioServerPlugInDriverRef in
+ 		case kAudioDevicePropertyAvailableNominalSampleRates:
+ 		case kAudioDevicePropertyIsHidden:
+ 		case kAudioDevicePropertyPreferredChannelsForStereo:
+-		case kAudioDevicePropertyPreferredChannelLayout:
+ 		case kAudioDevicePropertyZeroTimeStampPeriod:
+ 		case kAudioDevicePropertyIcon:
+ 			*outIsSettable = false;
+ 			break;
+-		
++
++		case kAudioDevicePropertyPreferredChannelLayout:
++			*outIsSettable = kNumber_Of_Channels == 8;
++			break;
++
+ 		case kAudioDevicePropertyNominalSampleRate:
+ 			*outIsSettable = true;
+ 			break;
+@@ -2812,9 +2830,19 @@ static OSStatus	BlackHole_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
  				((AudioChannelLayout*)outData)->mChannelLayoutTag = kAudioChannelLayoutTag_UseChannelDescriptions;
  				((AudioChannelLayout*)outData)->mChannelBitmap = 0;
  				((AudioChannelLayout*)outData)->mNumberChannelDescriptions = kNumber_Of_Channels;
 +#if kNumber_Of_Channels == 8
-+				//	7.1 in the labels Wine's Core Audio driver maps to Windows 7.1 surround:
-+				//	surround is the Windows back pair, surround direct the side pair.
-+				static const AudioChannelLabel kSurroundLabels[8] = {
-+					kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
-+					kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround,
-+					kAudioChannelLabel_LeftSurroundDirect, kAudioChannelLabel_RightSurroundDirect
-+				};
++				AudioChannelLabel theLabels[8];
++				pthread_mutex_lock(&gPlugIn_StateMutex);
++				memcpy(theLabels, gDevice_ChannelLabels, sizeof(theLabels));
++				pthread_mutex_unlock(&gPlugIn_StateMutex);
 +#endif
  				for(theItemIndex = 0; theItemIndex < kNumber_Of_Channels; ++theItemIndex)
  				{
 +#if kNumber_Of_Channels == 8
-+					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelLabel = kSurroundLabels[theItemIndex];
++					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelLabel = theLabels[theItemIndex];
 +#else
  					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelLabel = kAudioChannelLabel_Left + theItemIndex;
 +#endif
  					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelFlags = 0;
  					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mCoordinates[0] = 0;
  					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mCoordinates[1] = 0;
-@@ -4552,7 +4571,7 @@ static OSStatus	BlackHole_DoIOOperation(AudioServerPlugInDriverRef inDriver, Aud
+@@ -2896,7 +2924,33 @@ static OSStatus	BlackHole_SetDevicePropertyData(AudioServerPlugInDriverRef inDri
+ 				dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ gPlugIn_Host->RequestDeviceConfigurationChange(gPlugIn_Host, kObjectID_Device, ChangeAction_SetSampleRate, NULL); });
+ 			}
+ 			break;
+-		
++
++#if kNumber_Of_Channels == 8
++		case kAudioDevicePropertyPreferredChannelLayout:
++			{
++				const AudioChannelLayout* theLayout = (const AudioChannelLayout*)inData;
++				FailWithAction(inDataSize < offsetof(AudioChannelLayout, mChannelDescriptions) + (kNumber_Of_Channels * sizeof(AudioChannelDescription)), theAnswer = kAudioHardwareBadPropertySizeError, Done, "BlackHole_SetDevicePropertyData: wrong size for the data for kAudioDevicePropertyPreferredChannelLayout");
++				FailWithAction(theLayout->mChannelLayoutTag != kAudioChannelLayoutTag_UseChannelDescriptions || theLayout->mNumberChannelDescriptions != kNumber_Of_Channels, theAnswer = kAudioHardwareIllegalOperationError, Done, "BlackHole_SetDevicePropertyData: kAudioDevicePropertyPreferredChannelLayout needs one description per channel");
++				Boolean theLabelsChanged = false;
++				pthread_mutex_lock(&gPlugIn_StateMutex);
++				for(UInt32 theIndex = 0; theIndex < kNumber_Of_Channels; ++theIndex)
++				{
++					if(gDevice_ChannelLabels[theIndex] != theLayout->mChannelDescriptions[theIndex].mChannelLabel)
++					{
++						gDevice_ChannelLabels[theIndex] = theLayout->mChannelDescriptions[theIndex].mChannelLabel;
++						theLabelsChanged = true;
++					}
++				}
++				pthread_mutex_unlock(&gPlugIn_StateMutex);
++				if(theLabelsChanged)
++				{
++					*outNumberPropertiesChanged = 1;
++					outChangedAddresses[0] = *inAddress;
++				}
++			}
++			break;
++#endif
++
+ 		default:
+ 			theAnswer = kAudioHardwareUnknownPropertyError;
+ 			break;
+@@ -4552,7 +4606,7 @@ static OSStatus	BlackHole_DoIOOperation(AudioServerPlugInDriverRef inDriver, Aud
      if(inOperationID == kAudioServerPlugInIOOperationReadInput)
      {
          // If mute is one let's just fill the buffer with zeros or if there's no apps outputting audio
@@ -69,7 +135,7 @@ index ac516ef..04ca56e 100644
          {
              // Clear the ioMainBuffer
              vDSP_vclr(ioMainBuffer, 1, inIOBufferFrameSize * kNumber_Of_Channels);
-@@ -4571,7 +4590,7 @@ static OSStatus	BlackHole_DoIOOperation(AudioServerPlugInDriverRef inDriver, Aud
+@@ -4571,7 +4625,7 @@ static OSStatus	BlackHole_DoIOOperation(AudioServerPlugInDriverRef inDriver, Aud
              memcpy((Float32*)ioMainBuffer + firstPartFrameSize * kNumber_Of_Channels, gRingBuffer, secondPartFrameSize * kNumber_Of_Channels * sizeof(Float32));
              
              // Finally we'll apply the output volume to the buffer.

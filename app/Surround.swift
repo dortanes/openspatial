@@ -1,3 +1,4 @@
+import CoreAudioTypes
 import Foundation
 
 /// The 7.1 loudspeakers and the subwoofer that carries everything below the crossover.
@@ -39,6 +40,21 @@ enum SurroundChannel: CaseIterable {
         case .center, .subwoofer: (0.707, 0.707)
         case .backLeft, .sideLeft: (0.707, 0)
         case .backRight, .sideRight: (0, 0.707)
+        }
+    }
+}
+
+/// The speaker labels the driver reports, which decide where apps put the side and back pairs of 7.1.
+/// Mac apps follow Core Audio's 7.1, where surround is the side pair and rear surround the back pair;
+/// Wine knows only surround and surround direct, which it takes as the Windows back and side pairs.
+enum ChannelLayout: String, CaseIterable, Codable {
+    case mac, windows
+
+    var labels: [AudioChannelLabel] {
+        let fronts = [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen]
+        return switch self {
+        case .mac: fronts + [kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround, kAudioChannelLabel_RearSurroundLeft, kAudioChannelLabel_RearSurroundRight]
+        case .windows: fronts + [kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround, kAudioChannelLabel_LeftSurroundDirect, kAudioChannelLabel_RightSurroundDirect]
         }
     }
 }

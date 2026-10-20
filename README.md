@@ -73,7 +73,7 @@ Tips:
 - If the front isn't where your screen is, look at the screen and click **Center on current position** in **Settings → Head tracking**.
 - **Settings → Speakers** plays each speaker on its own, so you can check where it sits and set its level.
 - **3D view** in the menu bar panel shows the room live.
-- For Windows games in 7.1, open the bottle's Wine configuration, go to **Audio**, select OpenSpatial under **Speaker configuration** and set **Speakers** to **7.1 Surround**. This needs Wine 11.7 or later and has been tested only with CrossOver Preview.
+- For Windows games in 7.1, set **Channel layout** to **Windows** in **Settings → Speakers**. Then open the bottle's Wine configuration, go to **Audio**, select OpenSpatial under **Speaker configuration** and set **Speakers** to **7.1 Surround**. This needs Wine 11.7 or later and has been tested only with CrossOver Preview.
 
 ## Privacy
 

@@ -83,6 +83,23 @@ struct AudioDevice: Identifiable, Hashable {
         return Self.labels(of: raw.assumingMemoryBound(to: AudioChannelLayout.self))
     }
 
+    /// Labels the channels apps play to; a device that keeps its own labels ignores it.
+    func setOutputChannelLabels(_ labels: [AudioChannelLabel]) {
+        var address = Self.address(kAudioDevicePropertyPreferredChannelLayout, scope: kAudioObjectPropertyScopeOutput)
+        let size = MemoryLayout<AudioChannelLayout>.offset(of: \.mChannelDescriptions)! + labels.count * MemoryLayout<AudioChannelDescription>.stride
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: MemoryLayout<AudioChannelLayout>.alignment)
+        defer { raw.deallocate() }
+        let layout = raw.bindMemory(to: AudioChannelLayout.self, capacity: 1)
+        layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_UseChannelDescriptions
+        layout.pointee.mChannelBitmap = []
+        layout.pointee.mNumberChannelDescriptions = UInt32(labels.count)
+        let descriptions = UnsafeMutableBufferPointer(start: layout.pointer(to: \.mChannelDescriptions)!, count: labels.count)
+        for (index, label) in labels.enumerated() {
+            descriptions[index] = AudioChannelDescription(mChannelLabel: label, mChannelFlags: [], mCoordinates: (0, 0, 0))
+        }
+        AudioObjectSetPropertyData(id, &address, 0, nil, UInt32(size), raw)
+    }
+
     /// Sets the device's sample rate and confirms the device accepted it.
     func setSampleRate(_ rate: Float64) throws {
         var address = Self.address(kAudioDevicePropertyNominalSampleRate)

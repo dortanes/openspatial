@@ -24,6 +24,7 @@ struct Preferences: Codable {
     /// Hertz, within `BassCrossover.frequencies`.
     var crossover = BassCrossover.standardFrequency
     var subwooferInverted = false
+    var channelLayout = ChannelLayout.mac
     /// The output device the listener picked, by Core Audio UID.
     var outputDeviceUID: String?
     /// The system output before the app moved it to the driver, by UID; kept until it is restored,
@@ -61,6 +62,7 @@ struct Preferences: Codable {
         let crossover = try values.decodeIfPresent(Int.self, forKey: .crossover)
         self.crossover = crossover.flatMap { BassCrossover.frequencies.contains($0) ? $0 : nil } ?? defaults.crossover
         subwooferInverted = try values.decodeIfPresent(Bool.self, forKey: .subwooferInverted) ?? defaults.subwooferInverted
+        channelLayout = (try? values.decodeIfPresent(ChannelLayout.self, forKey: .channelLayout)) ?? defaults.channelLayout
         outputDeviceUID = try values.decodeIfPresent(String.self, forKey: .outputDeviceUID)
         previousSystemOutputUID = try values.decodeIfPresent(String.self, forKey: .previousSystemOutputUID)
     }
