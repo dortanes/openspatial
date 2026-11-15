@@ -104,23 +104,7 @@ Report bugs and suggest features in [Issues](https://github.com/dortanes/openspa
 
 ## Support OpenSpatial
 
-OpenSpatial is free and built in spare time. If it is useful to you, a donation helps keep it going.
-
-<a href="https://ko-fi.com/dortanes"><img src="https://img.shields.io/badge/Ko--fi-Support%20OpenSpatial-FF5E5B?logo=kofi&amp;logoColor=white" alt="Support OpenSpatial on Ko-fi"></a>
-
-<details>
-<summary>Donate USDT</summary>
-
-| Network | Address |
-| --- | --- |
-| TON | `UQDdOJ-e67sTvdkw3QbstGXiWa3KmB7_QUs98JZ-s53IPsyw` |
-| TRON (TRC-20) | `TNdEYdDKnfFt84wervgywr1iNg3ununuYw` |
-| Ethereum (ERC-20) | `0x464e564580C76D252CC8A9aF1994dA4eCacEEaC7` |
-| Solana | `GfcK6LRhTWGYHQYSGoqTaYRssk4xGV26XywpCwkA9BPJ` |
-
-Send only USDT, and only on the network listed next to the address.
-
-</details>
+OpenSpatial is free and built in spare time. If it is useful to you, a donation helps keep it going. All the ways to donate are at [anthy.net/donate](https://anthy.net/donate).
 
 ## License
 
